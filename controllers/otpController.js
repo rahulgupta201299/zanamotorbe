@@ -17,7 +17,7 @@ exports.generateOTP = async (req, res) => {
             });
         }
 
-        if (isdCode !== '91') {
+        if (isdCode !== '+91') {
             return res.status(400).json({
                 success: false,
                 error: 'We do not support OTP generation outside India as of now. Please use an Indian phone number (ISD code: +91)'

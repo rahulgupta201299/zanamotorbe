@@ -2,6 +2,17 @@ const BikeBrand = require('../models/BikeBrand');
 const BikeModel = require('../models/BikeModel');
 const BikeProduct = require('../models/BikeProduct');
 
+exports.createBrand = async (req, res) => {
+    try {
+        const { name, description } = req.body;
+        const newBrand = new BikeBrand({ name, description });
+        await newBrand.save();
+        res.status(201).json({ success: true, data: newBrand });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 exports.getAllBrands = async (req, res) => {
     try {
         const brands = await BikeBrand.find();
@@ -13,11 +24,16 @@ exports.getAllBrands = async (req, res) => {
 
 exports.getBrandsWithModels = async (req, res) => {
     try {
+        const { category } = req.query;
         const brands = await BikeBrand.find();
         const brandsWithModels = [];
 
         for (const brand of brands) {
-            const models = await BikeModel.find({ brand: brand._id });
+            const modelQuery = { brand: brand._id };
+            if (category) {
+                modelQuery.category = category;
+            }
+            const models = await BikeModel.find(modelQuery);
             brandsWithModels.push({
                 ...brand.toObject(),
                 models: models.map(m => ({

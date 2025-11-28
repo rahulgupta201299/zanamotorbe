@@ -2,8 +2,8 @@ const BikeModel = require('../models/BikeModel');
 
 exports.createModel = async (req, res) => {
     try {
-        const { brand, name, type, description, imageUrl } = req.body;
-        const newModel = new BikeModel({ brand, name, type, description, imageUrl });
+        const { brand, name, type, category, description, imageUrl } = req.body;
+        const newModel = new BikeModel({ brand, name, type, category, description, imageUrl });
         await newModel.save();
         res.status(201).json({ success: true, data: newModel });
     } catch (error) {
@@ -14,7 +14,7 @@ exports.createModel = async (req, res) => {
 exports.getModelsByBrand = async (req, res) => {
     try {
         const models = await BikeModel.find({ brand: req.params.brandId }).populate('brand');
-        const modelData = models.map(m => ({ _id: m._id, name: m.name }));
+        const modelData = models.map(m => ({ _id: m._id, name: m.name, category: m.category }));
         res.status(200).json({ success: true, data: modelData });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -33,10 +33,10 @@ exports.getModelById = async (req, res) => {
 
 exports.updateModel = async (req, res) => {
     try {
-        const { brand, name, type, description, imageUrl } = req.body;
+        const { brand, name, type, category, description, imageUrl } = req.body;
         const model = await BikeModel.findByIdAndUpdate(
             req.params.id,
-            { brand, name, type, description, imageUrl },
+            { brand, name, type, category, description, imageUrl },
             { new: true }
         ).populate('brand');
         if (!model) return res.status(404).json({ success: false, error: 'Model not found' });
