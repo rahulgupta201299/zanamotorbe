@@ -173,8 +173,7 @@ exports.getUserOrders = async (req, res) => {
         const skip = (page - 1) * limit;
 
         const orders = await Cart.find({
-            phoneNumber: phoneNumber,
-            status: 'ordered'
+            phoneNumber: phoneNumber
         })
         .populate('items.product')
         .sort({ orderDate: -1 })
