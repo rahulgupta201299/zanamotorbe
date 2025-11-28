@@ -4,8 +4,6 @@ const BikeModel = require('../models/BikeModel');
 exports.createProduct = async (req, res) => {
     try {
         const { brand, model, isBikeSpecific, name, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
-
-        // Auto-set isBikeSpecific based on whether model is provided
         const autoBikeSpecific = model ? (isBikeSpecific !== undefined ? isBikeSpecific : true) : false;
 
         const newProduct = new BikeProduct({
@@ -55,7 +53,6 @@ exports.updateProduct = async (req, res) => {
     try {
         const { brand, model, isBikeSpecific, name, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
 
-        // Auto-set isBikeSpecific based on whether model is provided (only if not explicitly set)
         const autoBikeSpecific = model ?
             (isBikeSpecific !== undefined ? isBikeSpecific : true) :
             false;
@@ -78,16 +75,13 @@ exports.getProductsByCategory = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        // Get total count for the category
         const totalProducts = await BikeProduct.countDocuments({ category: req.params.category });
 
-        // Get paginated products for the category
         const products = await BikeProduct.find({ category: req.params.category })
             .skip(skip)
             .limit(limit)
-            .sort({ createdAt: -1 }); // Sort by newest first
+            .sort({ createdAt: -1 });
 
-        // Calculate pagination info
         const totalPages = Math.ceil(totalProducts / limit);
         const hasNextPage = page < totalPages;
         const hasPrevPage = page > 1;
@@ -117,16 +111,13 @@ exports.getAllProductsPaginated = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        // Get total count
         const totalProducts = await BikeProduct.countDocuments();
 
-        // Get paginated products
         const products = await BikeProduct.find()
             .skip(skip)
             .limit(limit)
-            .sort({ createdAt: -1 }); // Sort by newest first
+            .sort({ createdAt: -1 });
 
-        // Calculate pagination info
         const totalPages = Math.ceil(totalProducts / limit);
         const hasNextPage = page < totalPages;
         const hasPrevPage = page > 1;
@@ -158,7 +149,6 @@ exports.searchProducts = async (req, res) => {
         }
         const skip = (page - 1) * parseInt(limit);
 
-        // Find model IDs where name matches query
         const matchingModels = await BikeModel.find({ name: { $regex: new RegExp(query, 'i') } }).select('_id');
         const modelIds = matchingModels.map(m => m._id);
 
@@ -185,7 +175,7 @@ exports.searchProducts = async (req, res) => {
                 { quantityAvailable: { $gt: 0 } }
             ]
         })
-            .select('name _id shortDescription price imageUrl')
+            .select('name _id shortDescription price imageUrl category')
             .skip(skip)
             .limit(parseInt(limit))
             .sort({ createdAt: -1 });
@@ -213,7 +203,6 @@ exports.searchProducts = async (req, res) => {
 
 exports.getCategoryCounts = async (req, res) => {
     try {
-        // Get category counts using MongoDB aggregation, including categoryIcon
         const categoriesData = await BikeProduct.aggregate([
             {
                 $group: {
@@ -223,7 +212,7 @@ exports.getCategoryCounts = async (req, res) => {
                 }
             },
             {
-                $sort: { count: -1 } // Sort by count descending
+                $sort: { count: -1 }
             },
             {
                 $project: {

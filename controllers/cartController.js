@@ -1,7 +1,6 @@
 const Cart = require('../models/Cart');
 const BikeProduct = require('../models/BikeProduct');
 
-// Validate product availability
 const validateProductAvailability = async (items) => {
     const validationResults = [];
 
@@ -42,9 +41,6 @@ const validateProductAvailability = async (items) => {
     return validationResults;
 };
 
-// Combined Cart and Order API based on phoneNumber
-
-// Validate cart items availability
 exports.validateCart = async (req, res) => {
     try {
         const { items } = req.body;
@@ -74,12 +70,10 @@ exports.validateCart = async (req, res) => {
     }
 };
 
-// Save cart with validation, product details, price, quantity and address
 exports.saveCartWithDetails = async (req, res) => {
     try {
         const { phoneNumber, items, shippingAddress, billingAddress } = req.body;
 
-        // Validate required fields
         if (!phoneNumber) {
             return res.status(400).json({ success: false, error: 'phoneNumber is required' });
         }
@@ -91,7 +85,6 @@ exports.saveCartWithDetails = async (req, res) => {
             });
         }
 
-        // Validate product availability first
         const validationResults = await validateProductAvailability(items);
         const allValid = validationResults.every(result => result.isValid);
 
@@ -104,7 +97,6 @@ exports.saveCartWithDetails = async (req, res) => {
             });
         }
 
-        // Build cart items with product details and pricing
         const cartItems = [];
         for (const validationResult of validationResults) {
             const itemRequest = items.find(
@@ -119,8 +111,9 @@ exports.saveCartWithDetails = async (req, res) => {
             });
         }
 
-        // Find existing cart or create new one
         let cart = await Cart.findOne({ userId: phoneNumber });
+
+        const orderId = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
         if (!cart) {
             cart = new Cart({
@@ -128,13 +121,15 @@ exports.saveCartWithDetails = async (req, res) => {
                 items: cartItems,
                 shippingAddress,
                 billingAddress,
-                status: 'validated'
+                status: 'validated',
+                orderNumber: orderId
             });
         } else {
             cart.items = cartItems;
             if (shippingAddress) cart.shippingAddress = shippingAddress;
             if (billingAddress) cart.billingAddress = billingAddress;
             cart.status = 'validated';
+            cart.orderNumber = orderId;
         }
 
         await cart.save();
@@ -160,7 +155,6 @@ exports.getCart = async (req, res) => {
     }
 };
 
-// Get all orders for a phone number
 exports.getUserOrders = async (req, res) => {
     try {
         const { phoneNumber } = req.params;
@@ -168,7 +162,6 @@ exports.getUserOrders = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        // Get orders (carts with status 'ordered')
         const orders = await Cart.find({
             userId: phoneNumber,
             status: 'ordered'
@@ -204,7 +197,6 @@ exports.getUserOrders = async (req, res) => {
     }
 };
 
-// Get a specific order by orderId
 exports.getOrderById = async (req, res) => {
     try {
         const { orderId } = req.params;
@@ -230,14 +222,10 @@ exports.getOrderById = async (req, res) => {
     }
 };
 
-
-
-// Convert cart to order (checkout process)
 exports.checkoutCart = async (req, res) => {
     try {
         const { phoneNumber } = req.body;
 
-        // Find the user's active cart
         const cart = await Cart.findOne({
             userId: phoneNumber,
             status: { $in: ['active', 'validated', 'checkout'] }
@@ -257,12 +245,12 @@ exports.checkoutCart = async (req, res) => {
             });
         }
 
-        // Generate order number
-        const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+        // Generate orderNumber if not already present
+        if (!cart.orderNumber) {
+            cart.orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+        }
 
-        // Update cart to order
         cart.status = 'ordered';
-        cart.orderNumber = orderNumber;
         cart.orderDate = new Date();
         cart.orderStatus = 'placed';
 
