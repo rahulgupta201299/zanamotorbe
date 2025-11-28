@@ -5,6 +5,6 @@ const modelController = require('../controllers/modelController');
 router.post('/', modelController.createModel);
 router.get('/brand/:brandId', modelController.getModelsByBrand);
 router.get('/:id', modelController.getModelById);
-router.put('/:id', modelController.updateModel);
+router.post('/:id', modelController.updateModel);
 
 module.exports = router;

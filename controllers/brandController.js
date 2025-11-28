@@ -13,6 +13,21 @@ exports.createBrand = async (req, res) => {
     }
 };
 
+exports.updateBrand = async (req, res) => {
+    try {
+        const { name, description } = req.body;
+        const brand = await BikeBrand.findByIdAndUpdate(
+            req.params.id,
+            { name, description },
+            { new: true }
+        );
+        if (!brand) return res.status(404).json({ success: false, error: 'Brand not found' });
+        res.status(200).json({ success: true, data: brand });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 exports.getAllBrands = async (req, res) => {
     try {
         const brands = await BikeBrand.find();

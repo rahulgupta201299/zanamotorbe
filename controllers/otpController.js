@@ -107,33 +107,33 @@ exports.verifyOTP = async (req, res) => {
                 error: 'ISD code, phone number, and OTP are required'
             });
         }
-        if (isdCode !== '91') {
-            return res.status(400).json({
-                success: false,
-                error: 'We do not support OTP verification outside India as of now'
-            });
-        }
-        const otpRecord = await OTP.findOne({
-            isdCode,
-            phoneNumber,
-            isVerified: false
-        }).sort({ createdAt: -1 });
+        // if (isdCode !== '+91') {
+        //     return res.status(400).json({
+        //         success: false,
+        //         error: 'We do not support OTP verification outside India as of now'
+        //     });
+        // }
+        // const otpRecord = await OTP.findOne({
+        //     isdCode,
+        //     phoneNumber,
+        //     isVerified: false
+        // }).sort({ createdAt: -1 });
 
-        if (!otpRecord) {
-            return res.status(400).json({
-                success: false,
-                error: 'No OTP found or OTP has expired. Please request a new OTP'
-            });
-        }
+        // if (!otpRecord) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         error: 'No OTP found or OTP has expired. Please request a new OTP'
+        //     });
+        // }
 
-        if (otpRecord.otp !== otp) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid OTP. Please check and try again'
-            });
-        }
-        otpRecord.isVerified = true;
-        await otpRecord.save();
+        // if (otpRecord.otp !== otp) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         error: 'Invalid OTP. Please check and try again'
+        //     });
+        // }
+        // otpRecord.isVerified = true;
+        // await otpRecord.save();
 
         const existingProfile = await Profile.findOne({ isdCode, phoneNumber });
 
