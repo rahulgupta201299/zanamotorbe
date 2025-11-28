@@ -3,6 +3,13 @@ const Profile = require('../models/Profile');
 exports.createProfile = async (req, res) => {
     try {
         const { firstName, lastName, isdCode, phoneNumber, emailId, address, notifyOffers, bikeOwnedByCustomer } = req.body;
+
+        // Check if profile with same isdCode and phoneNumber already exists
+        const existingProfile = await Profile.findOne({ isdCode, phoneNumber });
+        if (existingProfile) {
+            return res.status(400).json({ success: false, error: 'Profile with this ISD code and phone number already exists' });
+        }
+
         const newProfile = new Profile({ firstName, lastName, isdCode, phoneNumber, emailId, address, notifyOffers, bikeOwnedByCustomer });
         await newProfile.save();
         res.status(201).json({ success: true, data: newProfile });
