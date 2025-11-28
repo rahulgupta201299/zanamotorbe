@@ -9,6 +9,6 @@ router.get('/categories/count', productController.getCategoryCounts);
 router.get('/model/:modelId', productController.getProductsByModel);
 router.get('/category/:category', productController.getProductsByCategory);
 router.get('/:id', productController.getProductById);
-router.put('/:id', productController.updateProduct);
+router.post('/:id', productController.updateProduct);
 
 module.exports = router;
