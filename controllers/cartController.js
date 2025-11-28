@@ -111,13 +111,13 @@ exports.saveCartWithDetails = async (req, res) => {
             });
         }
 
-        let cart = await Cart.findOne({ userId: phoneNumber });
+        let cart = await Cart.findOne({ phoneNumber });
 
         const orderId = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
         if (!cart) {
             cart = new Cart({
-                userId: phoneNumber,
+                phoneNumber,
                 items: cartItems,
                 shippingAddress,
                 billingAddress,
@@ -135,10 +135,20 @@ exports.saveCartWithDetails = async (req, res) => {
         await cart.save();
         await cart.populate('items.product');
 
-        res.status(200).json({ 
-            success: true, 
+        res.status(200).json({
+            success: true,
             message: 'Cart saved successfully with validated items',
-            data: cart 
+            data: {
+                _id: cart._id,
+                items: cart.items,
+                shippingAddress: cart.shippingAddress,
+                billingAddress: cart.billingAddress,
+                subtotal: cart.subtotal,
+                orderNumber: cart.orderNumber,
+                status: cart.status,
+                createdAt: cart.createdAt,
+                updatedAt: cart.updatedAt
+            }
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -147,7 +157,7 @@ exports.saveCartWithDetails = async (req, res) => {
 
 exports.getCart = async (req, res) => {
     try {
-        const cart = await Cart.findOne({ userId: req.params.phoneNumber }).populate('items.product');
+        const cart = await Cart.findOne({ phoneNumber: req.params.phoneNumber }).populate('items.product');
         if (!cart) return res.status(404).json({ success: false, error: 'Cart not found' });
         res.status(200).json({ success: true, data: cart });
     } catch (error) {
@@ -163,7 +173,7 @@ exports.getUserOrders = async (req, res) => {
         const skip = (page - 1) * limit;
 
         const orders = await Cart.find({
-            userId: phoneNumber,
+            phoneNumber: phoneNumber,
             status: 'ordered'
         })
         .populate('items.product')
@@ -172,7 +182,7 @@ exports.getUserOrders = async (req, res) => {
         .limit(limit);
 
         const totalOrders = await Cart.countDocuments({
-            userId: phoneNumber,
+            phoneNumber,
             status: 'ordered'
         });
 
@@ -227,7 +237,7 @@ exports.checkoutCart = async (req, res) => {
         const { phoneNumber } = req.body;
 
         const cart = await Cart.findOne({
-            userId: phoneNumber,
+            phoneNumber,
             status: { $in: ['active', 'validated', 'checkout'] }
         }).populate('items.product');
 

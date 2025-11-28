@@ -35,7 +35,7 @@ const addressSchema = new mongoose.Schema({
 }, { _id: false });
 
 const cartSchema = new mongoose.Schema({
-    userId: {
+    phoneNumber: {
         type: String,
         required: true
     },
