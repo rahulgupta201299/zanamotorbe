@@ -75,9 +75,9 @@ exports.getProductsByCategory = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        const totalProducts = await BikeProduct.countDocuments({ category: req.params.category });
+        const totalProducts = await BikeProduct.countDocuments({ category: { $regex: new RegExp(req.params.category, 'i') } });
 
-        const products = await BikeProduct.find({ category: req.params.category })
+        const products = await BikeProduct.find({ category: { $regex: new RegExp(req.params.category, 'i') } })
             .skip(skip)
             .limit(limit)
             .sort({ createdAt: -1 });
