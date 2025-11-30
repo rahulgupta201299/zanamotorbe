@@ -152,7 +152,7 @@ exports.verifyOTP = async (req, res) => {
                 success: true,
                 data: {
                     message: 'OTP verified successfully',
-                    phoneNumber: `+${isdCode}-${phoneNumber}`,
+                    phoneNumber: `${isdCode}-${phoneNumber}`,
                     verified: true
                 }
             });
