@@ -49,13 +49,15 @@ exports.getBrandsWithModels = async (req, res) => {
                 modelQuery.category = category;
             }
             const models = await BikeModel.find(modelQuery);
-            brandsWithModels.push({
-                ...brand.toObject(),
-                models: models.map(m => ({
-                    ...m.toObject(),
-                    brandName: brand.name
-                }))
-            });
+            if (models.length > 0) {
+                brandsWithModels.push({
+                    ...brand.toObject(),
+                    models: models.map(m => ({
+                        ...m.toObject(),
+                        brandName: brand.name
+                    }))
+                });
+            }
         }
 
         res.status(200).json({ success: true, data: brandsWithModels });
