@@ -79,10 +79,18 @@ const cartSchema = new mongoose.Schema({
         enum: ['pending', 'paid', 'failed', 'refunded'],
         default: 'pending'
     },
+    razorpayOrderId: {
+        type: String
+    },
+    razorpayPaymentId: {
+        type: String
+    },
+    razorpaySignature: {
+        type: String
+    },
     orderStatus: {
         type: String,
         enum: ['placed', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'],
-        default: 'placed'
     },
     orderDate: {
         type: Date
@@ -131,6 +139,7 @@ const cartSchema = new mongoose.Schema({
 // Pre-save middleware to calculate totals
 cartSchema.pre('save', function(next) {
     this.subtotal = this.items.reduce((total, item) => total + item.totalPrice, 0);
+    this.totalAmount = this.subtotal + this.shippingCost + this.taxAmount - this.discountAmount;
     this.updatedAt = Date.now();
     next();
 });

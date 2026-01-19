@@ -3,7 +3,7 @@ const BikeModel = require('../models/BikeModel');
 
 exports.createProduct = async (req, res) => {
     try {
-        const { brand, model, isBikeSpecific, name, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
+        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
         const autoBikeSpecific = model ? (isBikeSpecific !== undefined ? isBikeSpecific : true) : false;
 
         const newProduct = new BikeProduct({
@@ -11,6 +11,9 @@ exports.createProduct = async (req, res) => {
             model,
             isBikeSpecific: autoBikeSpecific,
             name,
+            productCode,
+            isNewArrival,
+            isGarageFavorite,
             shortDescription,
             longDescription,
             description,
@@ -51,7 +54,7 @@ exports.getProductById = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
     try {
-        const { brand, model, isBikeSpecific, name, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
+        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
 
         const autoBikeSpecific = model ?
             (isBikeSpecific !== undefined ? isBikeSpecific : true) :
@@ -59,7 +62,7 @@ exports.updateProduct = async (req, res) => {
 
         const product = await BikeProduct.findByIdAndUpdate(
             req.params.id,
-            { brand, model, isBikeSpecific: autoBikeSpecific, name, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn },
+            { brand, model, isBikeSpecific: autoBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn },
             { new: true }
         );
         if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
@@ -231,4 +234,22 @@ exports.getCategoryCounts = async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
-}
+};
+
+exports.getGarageFavorites = async (req, res) => {
+    try {
+        const products = await BikeProduct.find({ isGarageFavorite: true });
+        res.status(200).json({ success: true, data: products });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.getNewArrivals = async (req, res) => {
+    try {
+        const products = await BikeProduct.find({ isNewArrival: true });
+        res.status(200).json({ success: true, data: products });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};

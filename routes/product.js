@@ -6,6 +6,8 @@ router.post('/', productController.createProduct);
 router.get('/all', productController.getAllProductsPaginated);
 router.get('/search', productController.searchProducts);
 router.get('/categories/count', productController.getCategoryCounts);
+router.get('/garage-favorite', productController.getGarageFavorites);
+router.get('/new-arrivals', productController.getNewArrivals);
 router.get('/model/:modelId', productController.getProductsByModel);
 router.get('/category/:category', productController.getProductsByCategory);
 router.get('/:id', productController.getProductById);

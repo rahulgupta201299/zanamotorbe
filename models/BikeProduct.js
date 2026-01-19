@@ -13,9 +13,20 @@ const bikeProductSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    isNewArrival: {
+        type: Boolean,
+        default: false
+    },
+    isGarageFavorite: {
+        type: Boolean,
+        default: false
+    },
     name: {
         type: String,
         required: true
+    },
+    productCode: {
+        type: String
     },
     shortDescription: {
         type: String

@@ -9,6 +9,8 @@ router.use('/brand', require('./brand'));
 router.use('/model', require('./model'));
 router.use('/product', require('./product'));
 router.use('/cart', require('./cart'));
+router.use('/wishlist', require('./wishlist'));
+router.use('/payment', require('./payment'));
 
 // OTP routes
 router.use('/otp', require('./otp'));

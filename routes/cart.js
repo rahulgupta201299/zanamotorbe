@@ -2,11 +2,15 @@ const express = require('express');
 const router = express.Router();
 const cartController = require('../controllers/cartController');
 
+router.get('/active/:phoneNumber', cartController.getActiveCart);
+router.post('/item', cartController.manageCartItem);
+router.post('/clear', cartController.clearCart);
+router.post('/addresses', cartController.updateCartAddresses);
+
+// Cart validation
 router.post('/validate', cartController.validateCart);
-router.post('/save', cartController.saveCartWithDetails);
-router.get('/orders/:phoneNumber', cartController.getUserOrders);
-router.get('/:phoneNumber', cartController.getCart);
-router.get('/order/:orderId', cartController.getOrderById);
+
+// Checkout process
 router.post('/checkout', cartController.checkoutCart);
 
 module.exports = router;
