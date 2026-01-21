@@ -118,91 +118,181 @@ exports.getActiveCart = async (req, res) => {
     }
 };
 
-// Manage cart item (add/update/remove)
+// Manage cart item (add/update/remove multiple items)
 exports.manageCartItem = async (req, res) => {
     try {
-        const { phoneNumber, productId, quantity } = req.body;
+        const { phoneNumber, items } = req.body;
 
-        if (!phoneNumber || !productId || quantity === undefined) {
+        if (!phoneNumber) {
             return res.status(400).json({
                 success: false,
-                error: 'phoneNumber, productId, and quantity are required'
+                error: 'phoneNumber is required'
             });
         }
 
-        if (quantity < 0) {
+        if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({
                 success: false,
-                error: 'Quantity cannot be negative'
-            });
-        }
-
-        // Check product exists
-        const product = await BikeProduct.findById(productId);
-        if (!product) {
-            return res.status(404).json({
-                success: false,
-                error: 'Product not found'
+                error: 'items array is required and cannot be empty'
             });
         }
 
         let cart = await getOrCreateCart(phoneNumber);
+        const processedItems = [];
+        const unProcessedItems = [];
+        const errors = [];
 
-        const existingItemIndex = cart.items.findIndex(
-            item => item.product.toString() === productId
-        );
+        // Process each item in the array
+        for (let i = 0; i < items.length; i++) {
+            const { productId, quantity } = items[i];
 
-        if (quantity === 0) {
-            // Remove item if exists
-            if (existingItemIndex > -1) {
-                cart.items.splice(existingItemIndex, 1);
-            }
-        } else {
-            // Check availability
-            if (product.quantityAvailable < quantity) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Insufficient quantity available',
-                    available: product.quantityAvailable,
-                    requested: quantity
+            if (!productId || quantity === undefined) {
+                errors.push({
+                    index: i,
+                    productId,
+                    quantity,
+                    message: 'productId and quantity are required'
                 });
+                continue;
             }
 
-            if (existingItemIndex > -1) {
-                // Update existing item
-                cart.items[existingItemIndex].quantity = quantity;
-                cart.items[existingItemIndex].totalPrice = calculateItemTotal(product.price, quantity);
+            if (quantity < 0) {
+                errors.push({
+                    index: i,
+                    productId,
+                    quantity,
+                    message: 'Quantity cannot be negative'
+                });
+                continue;
+            }
+
+            const product = await BikeProduct.findById(productId);
+            if (!product) {
+                errors.push({
+                    index: i,
+                    productId,
+                    message: 'Product not found',
+                    quantity
+                });
+                continue;
+            }
+
+            const existingItemIndex = cart.items.findIndex(
+                item => item.product.toString() === productId
+            );
+
+            if (quantity === 0) {
+                // Remove item if exists
+                if (existingItemIndex > -1) {
+                    cart.items.splice(existingItemIndex, 1);
+                    processedItems.push({
+                        productId,
+                        action: 'removed',
+                        quantity: 0
+                    });
+                } else {
+                    processedItems.push({
+                        productId,
+                        action: 'no-op',
+                        quantity: 0,
+                        message: 'Item not in cart'
+                    });
+                }
             } else {
-                // Add new item
-                cart.items.push({
-                    product: productId,
-                    quantity: quantity,
-                    price: product.price,
-                    totalPrice: calculateItemTotal(product.price, quantity)
-                });
+                // quantity > 0
+                let quantityToAdd = quantity;
+                let quantityNotProcessed = 0;
+
+                if (product.quantityAvailable < quantity) {
+                    quantityToAdd = product.quantityAvailable;
+                    quantityNotProcessed = quantity - product.quantityAvailable;
+
+                    if (quantityNotProcessed > 0) {
+                        unProcessedItems.push({
+                            product: product.toObject(),
+                            quantity: quantityNotProcessed,
+                            price: product.price,
+                            totalPrice: calculateItemTotal(product.price, quantityNotProcessed),
+                            message: `Only ${quantityToAdd} available, ${quantityNotProcessed} not processed`,
+                            availableQuantity: product.quantityAvailable
+                        });
+                    }
+                }
+
+                if (quantityToAdd > 0) {
+                    if (existingItemIndex > -1) {
+                        // Update existing item
+                        cart.items[existingItemIndex].quantity += quantityToAdd;
+                        cart.items[existingItemIndex].totalPrice = calculateItemTotal(product.price, cart.items[existingItemIndex].quantity);
+                        processedItems.push({
+                            productId,
+                            action: 'updated',
+                            quantity: cart.items[existingItemIndex].quantity
+                        });
+                    } else {
+                        // Add new item
+                        cart.items.push({
+                            product: productId,
+                            quantity: quantityToAdd,
+                            price: product.price,
+                            totalPrice: calculateItemTotal(product.price, quantityToAdd)
+                        });
+                        processedItems.push({
+                            productId,
+                            action: 'added',
+                            quantity: quantityToAdd
+                        });
+                    }
+                }
             }
         }
 
-        // If cart becomes empty after removal, delete it from database
+        // If there are validation errors, return them
+        if (errors.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Validation errors in request',
+                errors
+            });
+        }
+
+        // Save cart if it has items, or delete if empty
         if (cart.items.length === 0) {
-            await Cart.findByIdAndDelete(cart._id);
-            // Return virtual empty cart for consistency
+            if (cart._id) {
+                await Cart.findByIdAndDelete(cart._id);
+            }
             cart = {
                 phoneNumber,
                 items: [],
                 status: 'active',
-                _id: null
+                _id: null,
+                subtotal: 0,
+                paymentStatus: 'pending',
+                shippingCost: 0,
+                taxAmount: 0,
+                discountAmount: 0,
+                totalAmount: 0,
+                createdAt: new Date(),
+                updatedAt: new Date()
             };
         } else {
             await cart.save();
             await cart.populate('items.product');
         }
 
-        const action = quantity === 0 ? 'removed from' : (existingItemIndex > -1 ? 'updated in' : 'added to');
         res.status(200).json({
             success: true,
-            message: `Item ${action} cart successfully`,
-            data: cart
+            processedItems: cart.items,
+            unProcessedItems,
+            subtotal: cart.subtotal,
+            paymentStatus: cart.paymentStatus,
+            shippingCost: cart.shippingCost,
+            taxAmount: cart.taxAmount,
+            discountAmount: cart.discountAmount,
+            totalAmount: cart.totalAmount,
+            status: cart.status,
+            createdAt: cart.createdAt,
+            updatedAt: cart.updatedAt
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
