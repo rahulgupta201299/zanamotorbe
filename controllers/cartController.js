@@ -32,7 +32,9 @@ const validateProductAvailability = async (items) => {
                 isValid: false,
                 message: 'Product not found',
                 requestedQuantity: item.quantity,
-                availableQuantity: 0
+                availableQuantity: 0,
+                price: 0,
+                product: null
             });
         } else if (product.quantityAvailable < item.quantity) {
             validationResults.push({
@@ -42,7 +44,8 @@ const validateProductAvailability = async (items) => {
                 message: 'Insufficient quantity available',
                 requestedQuantity: item.quantity,
                 availableQuantity: product.quantityAvailable,
-                price: product.price
+                price: product.price,
+                product: product
             });
         } else {
             validationResults.push({
@@ -52,7 +55,8 @@ const validateProductAvailability = async (items) => {
                 message: 'Product available',
                 requestedQuantity: item.quantity,
                 availableQuantity: product.quantityAvailable,
-                price: product.price
+                price: product.price,
+                product: product
             });
         }
     }
@@ -121,6 +125,7 @@ exports.getActiveCart = async (req, res) => {
 // Manage cart item (add/update/remove multiple items)
 exports.manageCartItem = async (req, res) => {
     try {
+        console.log('inside mangecartitem')
         const { phoneNumber, items } = req.body;
 
         if (!phoneNumber) {
@@ -138,11 +143,10 @@ exports.manageCartItem = async (req, res) => {
         }
 
         let cart = await getOrCreateCart(phoneNumber);
-        const processedItems = [];
         const unProcessedItems = [];
         const errors = [];
-
-        // Process each item in the array
+        console.log(cart);
+        // Process each item in the array to update cart
         for (let i = 0; i < items.length; i++) {
             const { productId, quantity } = items[i];
 
@@ -177,73 +181,45 @@ exports.manageCartItem = async (req, res) => {
                 continue;
             }
 
-            const existingItemIndex = cart.items.findIndex(
-                item => item.product.toString() === productId
-            );
+            // Find existing item in cart
+            const existingItemIndex = cart.items.findIndex(item => item.product.toString() === productId);
 
             if (quantity === 0) {
-                // Remove item if exists
+                // Remove item if quantity is 0
                 if (existingItemIndex > -1) {
                     cart.items.splice(existingItemIndex, 1);
-                    processedItems.push({
-                        productId,
-                        action: 'removed',
-                        quantity: 0
-                    });
-                } else {
-                    processedItems.push({
-                        productId,
-                        action: 'no-op',
-                        quantity: 0,
-                        message: 'Item not in cart'
-                    });
                 }
+                continue;
+            }
+
+            const availableQuantity = product.quantityAvailable;
+            const processedQuantity = Math.min(quantity, availableQuantity);
+
+            if (existingItemIndex > -1) {
+                // Update existing item
+                cart.items[existingItemIndex].quantity = processedQuantity;
+                cart.items[existingItemIndex].totalPrice = calculateItemTotal(product.price, processedQuantity);
             } else {
-                // quantity > 0
-                let quantityToAdd = quantity;
-                let quantityNotProcessed = 0;
+                // Add new item to cart
+                cart.items.push({
+                    product: productId,
+                    quantity: processedQuantity,
+                    price: product.price,
+                    totalPrice: calculateItemTotal(product.price, processedQuantity)
+                });
+            }
 
-                if (product.quantityAvailable < quantity) {
-                    quantityToAdd = product.quantityAvailable;
-                    quantityNotProcessed = quantity - product.quantityAvailable;
-
-                    if (quantityNotProcessed > 0) {
-                        unProcessedItems.push({
-                            product: product.toObject(),
-                            quantity: quantityNotProcessed,
-                            price: product.price,
-                            totalPrice: calculateItemTotal(product.price, quantityNotProcessed),
-                            message: `Only ${quantityToAdd} available, ${quantityNotProcessed} not processed`,
-                            availableQuantity: product.quantityAvailable
-                        });
-                    }
-                }
-
-                if (quantityToAdd > 0) {
-                    if (existingItemIndex > -1) {
-                        // Update existing item
-                        cart.items[existingItemIndex].quantity += quantityToAdd;
-                        cart.items[existingItemIndex].totalPrice = calculateItemTotal(product.price, cart.items[existingItemIndex].quantity);
-                        processedItems.push({
-                            productId,
-                            action: 'updated',
-                            quantity: cart.items[existingItemIndex].quantity
-                        });
-                    } else {
-                        // Add new item
-                        cart.items.push({
-                            product: productId,
-                            quantity: quantityToAdd,
-                            price: product.price,
-                            totalPrice: calculateItemTotal(product.price, quantityToAdd)
-                        });
-                        processedItems.push({
-                            productId,
-                            action: 'added',
-                            quantity: quantityToAdd
-                        });
-                    }
-                }
+            // If requested quantity exceeds available, add excess to unProcessedItems
+            if (quantity > availableQuantity) {
+                const excess = quantity - availableQuantity;
+                unProcessedItems.push({
+                    product: product._id,
+                    quantity: excess,
+                    price: product.price,
+                    totalPrice: calculateItemTotal(product.price, excess),
+                    message: `Only ${availableQuantity} available, ${excess} not processed`,
+                    availableQuantity: availableQuantity
+                });
             }
         }
 
@@ -254,6 +230,30 @@ exports.manageCartItem = async (req, res) => {
                 error: 'Validation errors in request',
                 errors
             });
+        }
+
+                    console.log(cart)
+
+        // Validate product availability for all cart items at the end
+        if (cart.items.length > 0) {
+            const validationResults = await validateProductAvailability(cart.items.map(item => ({ productId: item.product, quantity: item.quantity })));
+
+            for (const result of validationResults) {
+                if (!result.isValid) {
+                    const itemIndex = cart.items.findIndex(item => item.product.toString() === result.productId.toString());
+                    if (itemIndex > -1) {
+                        cart.items.splice(itemIndex, 1);
+                        unProcessedItems.push({
+                            product: result.product,
+                            quantity: result.requestedQuantity,
+                            price: result.price,
+                            totalPrice: calculateItemTotal(result.price, result.requestedQuantity),
+                            message: result.message,
+                            availableQuantity: result.availableQuantity
+                        });
+                    }
+                }
+            }
         }
 
         // Save cart if it has items, or delete if empty
