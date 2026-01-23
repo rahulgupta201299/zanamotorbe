@@ -13,8 +13,33 @@ exports.createBlog = async (req, res) => {
 
 exports.getAllBlogs = async (req, res) => {
     try {
-        const blogs = await Blog.find();
-        res.status(200).json({ success: true, data: blogs });
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+
+        // Get total count for pagination metadata
+        const totalBlogs = await Blog.countDocuments();
+
+        // Fetch paginated blogs
+        const blogs = await Blog.find()
+            .sort({ createdAt: -1 }) // Sort by newest first
+            .skip(skip)
+            .limit(limit);
+
+        const totalPages = Math.ceil(totalBlogs / limit);
+
+        res.status(200).json({
+            success: true,
+            data: blogs,
+            pagination: {
+                currentPage: page,
+                totalPages: totalPages,
+                totalBlogs: totalBlogs,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1,
+                limit: limit
+            }
+        });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
