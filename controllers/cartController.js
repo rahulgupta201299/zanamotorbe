@@ -1,5 +1,6 @@
 const Cart = require('../models/Cart');
 const BikeProduct = require('../models/BikeProduct');
+const Coupon = require('../models/Coupon');
 
 // Helper function to get or create cart
 const getOrCreateCart = async (phoneNumber) => {
@@ -380,6 +381,203 @@ exports.updateCartAddresses = async (req, res) => {
     }
 };
 
+// Helper function to calculate discount based on coupon type
+const calculateDiscount = (coupon, subtotal) => {
+    let discount = 0;
+
+    switch (coupon.type) {
+        case 'Percentage':
+            discount = (subtotal * coupon.discount) / 100;
+            if (coupon.maxDiscount && discount > coupon.maxDiscount) {
+                discount = coupon.maxDiscount;
+            }
+            break;
+        case 'Flat':
+            discount = coupon.discount;
+            break;
+        case 'Special':
+        case 'Festival':
+        case 'First Order':
+            // For now, treat as flat discount, but can be customized later
+            discount = coupon.discount;
+            break;
+        default:
+            discount = 0;
+    }
+
+    return Math.round(discount); // Round to avoid decimal issues
+};
+
+// Helper function to validate coupon eligibility
+const validateCouponEligibility = async (coupon, phoneNumber, subtotal) => {
+    // Check if coupon is active
+    if (!coupon.isActive) {
+        return { isValid: false, message: 'Coupon is not active' };
+    }
+
+    // Check expiration
+    if (coupon.expiresAt && new Date() > coupon.expiresAt) {
+        return { isValid: false, message: 'Coupon has expired' };
+    }
+
+    // Check minimum cart amount
+    if (subtotal < coupon.minCartAmount) {
+        return { isValid: false, message: `Minimum cart amount of ₹${coupon.minCartAmount} required` };
+    }
+
+    // Check usage limit per user
+    if (coupon.usageLimit) {
+        const userUsage = coupon.usedBy.find(u => u.phoneNumber === phoneNumber);
+        if (userUsage && userUsage.usageCount >= coupon.usageLimit) {
+            return { isValid: false, message: 'Coupon usage limit exceeded' };
+        }
+    }
+
+    // Check overall usage limit
+    if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+        return { isValid: false, message: 'Coupon has reached maximum usage' };
+    }
+
+    return { isValid: true };
+};
+
+// Apply coupon to cart
+exports.applyCoupon = async (req, res) => {
+    try {
+        const { phoneNumber, couponCode } = req.body;
+
+        if (!phoneNumber) {
+            return res.status(400).json({
+                success: false,
+                error: 'phoneNumber is required'
+            });
+        }
+
+        if (!couponCode) {
+            return res.status(400).json({
+                success: false,
+                error: 'couponCode is required'
+            });
+        }
+
+        const cart = await Cart.findOne({ phoneNumber, status: 'active' });
+        if (!cart) {
+            return res.status(404).json({
+                success: false,
+                error: 'Active cart not found'
+            });
+        }
+
+        if (cart.items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Cart is empty'
+            });
+        }
+
+        // Find coupon
+        const coupon = await Coupon.findOne({
+            code: couponCode.toUpperCase(),
+            isActive: true
+        });
+
+        if (!coupon) {
+            return res.status(404).json({
+                success: false,
+                error: 'Invalid coupon code'
+            });
+        }
+
+        // Calculate current subtotal
+        const subtotal = cart.items.reduce((total, item) => total + item.totalPrice, 0);
+
+        // Validate coupon eligibility
+        const eligibility = await validateCouponEligibility(coupon, phoneNumber, subtotal);
+        if (!eligibility.isValid) {
+            return res.status(400).json({
+                success: false,
+                error: eligibility.message
+            });
+        }
+
+        // Calculate discount
+        const discountAmount = calculateDiscount(coupon, subtotal);
+
+        // Apply coupon to cart
+        cart.appliedCoupon = coupon._id;
+        cart.couponCode = coupon.code;
+        cart.discountAmount = discountAmount;
+
+        await cart.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Coupon applied successfully',
+            data: {
+                couponCode: coupon.code,
+                couponType: coupon.type,
+                discountAmount: discountAmount,
+                totalAmount: cart.totalAmount,
+                subtotal: cart.subtotal,
+                shippingCost: cart.shippingCost,
+                taxAmount: cart.taxAmount
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Remove coupon from cart
+exports.removeCoupon = async (req, res) => {
+    try {
+        const { phoneNumber } = req.body;
+
+        if (!phoneNumber) {
+            return res.status(400).json({
+                success: false,
+                error: 'phoneNumber is required'
+            });
+        }
+
+        const cart = await Cart.findOne({ phoneNumber, status: 'active' });
+        if (!cart) {
+            return res.status(404).json({
+                success: false,
+                error: 'Active cart not found'
+            });
+        }
+
+        if (!cart.appliedCoupon) {
+            return res.status(400).json({
+                success: false,
+                error: 'No coupon applied to cart'
+            });
+        }
+
+        // Remove coupon
+        cart.appliedCoupon = null;
+        cart.couponCode = null;
+        cart.discountAmount = 0;
+
+        await cart.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Coupon removed successfully',
+            data: {
+                totalAmount: cart.totalAmount,
+                subtotal: cart.subtotal,
+                shippingCost: cart.shippingCost,
+                taxAmount: cart.taxAmount,
+                discountAmount: 0
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 exports.checkoutCart = async (req, res) => {
     try {
         const { phoneNumber, paymentMethod = 'online' } = req.body;
@@ -424,18 +622,48 @@ exports.checkoutCart = async (req, res) => {
 
         // Update cart for checkout
         cart.paymentMethod = paymentMethod;
-        cart.status = 'checkout';
+        cart.status = 'ordered';
+        cart.orderDate = new Date();
+
+        // Generate order number
+        const orderNumber = `ORD-${phoneNumber}-${Date.now()}`;
+        cart.orderNumber = orderNumber;
+
+        // Update coupon usage if coupon was applied
+        if (cart.appliedCoupon) {
+            const coupon = await Coupon.findById(cart.appliedCoupon);
+            if (coupon) {
+                // Increment overall usage count
+                coupon.usedCount += 1;
+
+                // Update user usage
+                let userUsage = coupon.usedBy.find(u => u.phoneNumber === phoneNumber);
+                if (userUsage) {
+                    userUsage.usageCount += 1;
+                    userUsage.usedAt = new Date();
+                } else {
+                    coupon.usedBy.push({
+                        phoneNumber: phoneNumber,
+                        usageCount: 1,
+                        usedAt: new Date()
+                    });
+                }
+
+                await coupon.save();
+            }
+        }
 
         await cart.save();
 
         res.status(200).json({
             success: true,
-            message: 'Cart ready for checkout',
+            message: 'Order placed successfully',
             data: {
-                cartId: cart._id,
+                orderId: cart._id,
+                orderNumber: cart.orderNumber,
+                orderDate: cart.orderDate,
                 totalAmount: cart.totalAmount,
-                paymentMethod: paymentMethod,
-                status: cart.status,
+                orderStatus: cart.orderStatus,
                 itemsCount: cart.items.length
             }
         });

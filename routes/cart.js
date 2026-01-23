@@ -10,6 +10,10 @@ router.post('/addresses', cartController.updateCartAddresses);
 // Cart validation
 router.post('/validate', cartController.validateCart);
 
+// Coupon operations
+router.post('/apply-coupon', cartController.applyCoupon);
+router.post('/remove-coupon', cartController.removeCoupon);
+
 // Checkout process
 router.post('/checkout', cartController.checkoutCart);
 
