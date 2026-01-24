@@ -52,7 +52,7 @@ exports.createOrder = async (req, res) => {
         const options = {
             amount: amount,
             currency: 'INR',
-            receipt: `receipt_${cart._id}_${Date.now()}`,
+            receipt: `receipt_${cart._id}}`,
             payment_capture: 1, // Auto capture
             notes: {
                 cartId: cart._id.toString(),

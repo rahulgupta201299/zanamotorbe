@@ -72,7 +72,7 @@ const cartSchema = new mongoose.Schema({
     },
     paymentMethod: {
         type: String,
-        enum: ['card', 'upi', 'netbanking', 'cod', 'wallet']
+        enum: ['card', 'upi', 'netbanking', 'cod', 'wallet', 'online']
     },
     paymentStatus: {
         type: String,
