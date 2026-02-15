@@ -67,7 +67,6 @@ exports.createOrder = async (req, res) => {
         cart.razorpayOrderId = order.id;
         cart.paymentMethod = 'online';
         cart.paymentStatus = 'pending';
-        cart.status = 'checkout';
         await cart.save();
 
         res.status(200).json({
@@ -76,8 +75,8 @@ exports.createOrder = async (req, res) => {
                 orderId: order.id,
                 amount: order.amount,
                 currency: order.currency,
-                key: config.RAZORPAY_KEY_ID,
-                cartId: cart._id
+                cartId: cart._id,
+                name: "zanaltd"
             }
         });
 
