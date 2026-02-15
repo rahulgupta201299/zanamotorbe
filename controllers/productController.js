@@ -1,5 +1,21 @@
 const BikeProduct = require('../models/BikeProduct');
 const BikeModel = require('../models/BikeModel');
+const Wishlist = require('../models/Wishlist');
+
+// Helper function to add isWishlist field to products
+const addIsWishlistToProducts = async (products, phoneNumber) => {
+    if (!phoneNumber) {
+        return products.map(product => ({ ...product.toObject(), isWishlist: false }));
+    }
+    
+    const wishlist = await Wishlist.findOne({ phoneNumber });
+    const wishlistProductIds = wishlist ? wishlist.products.map(id => id.toString()) : [];
+    
+    return products.map(product => ({
+        ...product.toObject(),
+        isWishlist: wishlistProductIds.includes(product._id.toString())
+    }));
+};
 
 exports.createProduct = async (req, res) => {
     try {
@@ -35,8 +51,10 @@ exports.createProduct = async (req, res) => {
 
 exports.getProductsByModel = async (req, res) => {
     try {
+        const { phoneNumber } = req.query;
         const products = await BikeProduct.find({ model: req.params.modelId });
-        res.status(200).json({ success: true, data: products });
+        const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
+        res.status(200).json({ success: true, data: productsWithWishlist });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -44,9 +62,11 @@ exports.getProductsByModel = async (req, res) => {
 
 exports.getProductById = async (req, res) => {
     try {
+        const { phoneNumber } = req.query;
         const product = await BikeProduct.findById(req.params.id);
         if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
-        res.status(200).json({ success: true, data: product });
+        const productsWithWishlist = await addIsWishlistToProducts([product], phoneNumber);
+        res.status(200).json({ success: true, data: productsWithWishlist[0] });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -74,6 +94,7 @@ exports.updateProduct = async (req, res) => {
 
 exports.getProductsByCategory = async (req, res) => {
     try {
+        const { phoneNumber } = req.query;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
@@ -85,13 +106,15 @@ exports.getProductsByCategory = async (req, res) => {
             .limit(limit)
             .sort({ createdAt: -1 });
 
+        const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
+
         const totalPages = Math.ceil(totalProducts / limit);
         const hasNextPage = page < totalPages;
         const hasPrevPage = page > 1;
 
         res.status(200).json({
             success: true,
-            data: products,
+            data: productsWithWishlist,
             pagination: {
                 currentPage: page,
                 totalPages: totalPages,
@@ -110,6 +133,7 @@ exports.getProductsByCategory = async (req, res) => {
 
 exports.getAllProductsPaginated = async (req, res) => {
     try {
+        const { phoneNumber } = req.query;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
@@ -121,13 +145,15 @@ exports.getAllProductsPaginated = async (req, res) => {
             .limit(limit)
             .sort({ createdAt: -1 });
 
+        const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
+
         const totalPages = Math.ceil(totalProducts / limit);
         const hasNextPage = page < totalPages;
         const hasPrevPage = page > 1;
 
         res.status(200).json({
             success: true,
-            data: products,
+            data: productsWithWishlist,
             pagination: {
                 currentPage: page,
                 totalPages: totalPages,
