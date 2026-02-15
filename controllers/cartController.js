@@ -97,7 +97,6 @@ exports.validateCart = async (req, res) => {
 
 
 
-
 // Get active cart (for cart operations)
 exports.getActiveCart = async (req, res) => {
     try {
@@ -214,7 +213,7 @@ exports.manageCartItem = async (req, res) => {
             if (quantity > availableQuantity) {
                 const excess = quantity - availableQuantity;
                 unProcessedItems.push({
-                    product: product._id,
+                    product: product,
                     quantity: excess,
                     price: product.price,
                     totalPrice: calculateItemTotal(product.price, excess),
