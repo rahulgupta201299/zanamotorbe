@@ -152,7 +152,8 @@ exports.verifyPayment = async (req, res) => {
                 orderId: cart._id,
                 orderNumber: cart.orderNumber,
                 paymentId: razorpay_payment_id,
-                orderStatus: cart.orderStatus
+                orderStatus: cart.orderStatus,
+                orderDate: cart.orderDate
             }
         });
 
