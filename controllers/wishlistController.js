@@ -14,33 +14,37 @@ const getOrCreateWishlist = async (phoneNumber) => {
     return wishlist;
 };
 
-// Add product to wishlist
+// Add products to wishlist
 exports.addToWishlist = async (req, res) => {
     try {
-        const { phoneNumber, productId } = req.body;
+        const { phoneNumber, productIds } = req.body;
 
-        if (!phoneNumber || !productId) {
+        if (!phoneNumber || !productIds || !Array.isArray(productIds) || productIds.length === 0) {
             return res.status(400).json({
                 success: false,
-                error: 'phoneNumber and productId are required'
+                error: 'phoneNumber and productIds (array) are required'
             });
         }
 
-        // Check if product exists
-        const product = await BikeProduct.findById(productId);
-        if (!product) {
+        // Check if all products exist
+        const products = await BikeProduct.find({ _id: { $in: productIds } });
+        if (products.length !== productIds.length) {
+            const foundIds = products.map(p => p._id.toString());
+            const missingIds = productIds.filter(id => !foundIds.includes(id));
             return res.status(404).json({
                 success: false,
-                error: 'Product not found'
+                error: 'Some products not found',
+                missingProductIds: missingIds
             });
         }
 
         let wishlist = await getOrCreateWishlist(phoneNumber);
 
-        // Check if product already in wishlist
-        const productExists = wishlist.products.some(id => id.toString() === productId);
+        // Find products that are not already in wishlist
+        const existingProductIds = wishlist.products.map(id => id.toString());
+        const newProductIds = productIds.filter(id => !existingProductIds.includes(id));
 
-        if (productExists) {
+        if (newProductIds.length === 0) {
             await wishlist.populate({
                 path: 'products',
                 populate: {
@@ -49,13 +53,13 @@ exports.addToWishlist = async (req, res) => {
             });
             return res.status(200).json({
                 success: true,
-                message: 'Product already in wishlist',
+                message: 'All products already in wishlist',
                 data: wishlist
             });
         }
 
-        // Add product to wishlist
-        wishlist.products.push(productId);
+        // Add new products to wishlist
+        wishlist.products.push(...newProductIds);
         await wishlist.save();
         await wishlist.populate({
             path: 'products',
@@ -64,9 +68,13 @@ exports.addToWishlist = async (req, res) => {
             }
         });
 
+        const message = newProductIds.length === productIds.length 
+            ? 'Products added to wishlist successfully' 
+            : 'Some products were already in wishlist, others added successfully';
+
         res.status(200).json({
             success: true,
-            message: 'Product added to wishlist successfully',
+            message: message,
             data: wishlist
         });
     } catch (error) {
@@ -114,15 +122,15 @@ exports.getWishlist = async (req, res) => {
     }
 };
 
-// Remove product from wishlist
+// Remove products from wishlist
 exports.removeFromWishlist = async (req, res) => {
     try {
-        const { phoneNumber, productId } = req.body;
+        const { phoneNumber, productIds } = req.body;
 
-        if (!phoneNumber || !productId) {
+        if (!phoneNumber || !productIds || !Array.isArray(productIds) || productIds.length === 0) {
             return res.status(400).json({
                 success: false,
-                error: 'phoneNumber and productId are required'
+                error: 'phoneNumber and productIds (array) are required'
             });
         }
 
@@ -134,23 +142,26 @@ exports.removeFromWishlist = async (req, res) => {
             });
         }
 
-        const productIndex = wishlist.products.findIndex(id => id.toString() === productId);
-        if (productIndex === -1) {
+        const originalLength = wishlist.products.length;
+        
+        // Remove all products that are in the productIds array
+        wishlist.products = wishlist.products.filter(id => !productIds.includes(id.toString()));
+
+        const removedCount = originalLength - wishlist.products.length;
+
+        if (removedCount === 0) {
             return res.status(404).json({
                 success: false,
-                error: 'Product not found in wishlist'
+                error: 'None of the products found in wishlist'
             });
         }
-
-        // Remove product
-        wishlist.products.splice(productIndex, 1);
 
         // If wishlist becomes empty, delete it
         if (wishlist.products.length === 0) {
             await Wishlist.findByIdAndDelete(wishlist._id);
             return res.status(200).json({
                 success: true,
-                message: 'Product removed from wishlist successfully. Wishlist is now empty.',
+                message: 'Products removed from wishlist successfully. Wishlist is now empty.',
                 data: {
                     phoneNumber,
                     products: [],
@@ -169,7 +180,7 @@ exports.removeFromWishlist = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Product removed from wishlist successfully',
+            message: 'Products removed from wishlist successfully',
             data: wishlist
         });
     } catch (error) {
