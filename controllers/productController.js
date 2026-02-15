@@ -52,9 +52,37 @@ exports.createProduct = async (req, res) => {
 exports.getProductsByModel = async (req, res) => {
     try {
         const { phoneNumber } = req.query;
-        const products = await BikeProduct.find({ model: req.params.modelId });
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
+
+        const totalProducts = await BikeProduct.countDocuments({ model: req.params.modelId });
+
+        const products = await BikeProduct.find({ model: req.params.modelId })
+            .skip(skip)
+            .limit(limit)
+            .sort({ createdAt: -1 });
+
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
-        res.status(200).json({ success: true, data: productsWithWishlist });
+
+        const totalPages = Math.ceil(totalProducts / limit);
+        const hasNextPage = page < totalPages;
+        const hasPrevPage = page > 1;
+
+        res.status(200).json({
+            success: true,
+            data: productsWithWishlist,
+            pagination: {
+                currentPage: page,
+                totalPages: totalPages,
+                totalProducts: totalProducts,
+                productsPerPage: limit,
+                hasNextPage: hasNextPage,
+                hasPrevPage: hasPrevPage,
+                nextPage: hasNextPage ? page + 1 : null,
+                prevPage: hasPrevPage ? page - 1 : null
+            }
+        });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
