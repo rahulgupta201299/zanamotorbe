@@ -60,6 +60,14 @@ const cartSchema = new mongoose.Schema({
     }],
     shippingAddress: addressSchema,
     billingAddress: addressSchema,
+    emailId: {
+        type: String,
+        default: null
+    },
+    shippingAddressSameAsBillingAddress: {
+        type: Boolean,
+        default: false
+    },
     subtotal: {
         type: Number,
         default: 0

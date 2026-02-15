@@ -345,7 +345,7 @@ exports.clearCart = async (req, res) => {
 // Update cart addresses
 exports.updateCartAddresses = async (req, res) => {
     try {
-        const { phoneNumber, shippingAddress, billingAddress } = req.body;
+        const { phoneNumber, shippingAddress, billingAddress, emailId, shippingAddressSameAsBillingAddress } = req.body;
 
         if (!phoneNumber) {
             return res.status(400).json({
@@ -364,6 +364,8 @@ exports.updateCartAddresses = async (req, res) => {
 
         if (shippingAddress) cart.shippingAddress = shippingAddress;
         if (billingAddress) cart.billingAddress = billingAddress;
+        if (emailId !== undefined) cart.emailId = emailId;
+        if (shippingAddressSameAsBillingAddress !== undefined) cart.shippingAddressSameAsBillingAddress = shippingAddressSameAsBillingAddress;
 
         await cart.save();
 
@@ -372,7 +374,9 @@ exports.updateCartAddresses = async (req, res) => {
             message: 'Cart addresses updated successfully',
             data: {
                 shippingAddress: cart.shippingAddress,
-                billingAddress: cart.billingAddress
+                billingAddress: cart.billingAddress,
+                emailId: cart.emailId,
+                shippingAddressSameAsBillingAddress: cart.shippingAddressSameAsBillingAddress
             }
         });
     } catch (error) {
