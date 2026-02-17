@@ -4,6 +4,7 @@ const couponController = require('../controllers/couponController');
 
 // Admin routes (should be protected with authentication middleware)
 router.get('/', couponController.getAllCoupons);
+router.get('/:id', couponController.getCouponById);
 router.post('/', couponController.createCoupon);
 router.post('/update', couponController.updateCoupon);
 router.post('/toggle-status', couponController.toggleCouponStatus);

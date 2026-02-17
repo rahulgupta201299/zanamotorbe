@@ -55,6 +55,37 @@ exports.getAllCoupons = async (req, res) => {
     }
 };
 
+// Get coupon by ID
+exports.getCouponById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Validate MongoDB ObjectId
+        if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid coupon ID format'
+            });
+        }
+
+        const coupon = await Coupon.findById(id);
+
+        if (!coupon) {
+            return res.status(404).json({
+                success: false,
+                error: 'Coupon not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: coupon
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 
 
 // Create new coupon
