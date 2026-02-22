@@ -256,6 +256,50 @@ exports.manageCartItem = async (req, res) => {
             }
         }
 
+        // Handle coupon validation and recalculation if coupon is already applied
+        let couponRemoved = false;
+        let couponRemovedMessage = '';
+        
+        if (cart.appliedCoupon && cart.items.length > 0) {
+            // Calculate new subtotal
+            const newSubtotal = cart.items.reduce((total, item) => total + item.totalPrice, 0);
+            
+            // Get the applied coupon details
+            const coupon = await Coupon.findById(cart.appliedCoupon);
+            
+            if (coupon) {
+                // Re-validate coupon eligibility with new subtotal
+                const eligibility = await validateCouponEligibility(coupon, phoneNumber, newSubtotal);
+                
+                if (!eligibility.isValid) {
+                    // Coupon is no longer applicable, remove it
+                    couponRemoved = true;
+                    couponRemovedMessage = eligibility.message;
+                    cart.appliedCoupon = null;
+                    cart.couponCode = null;
+                    cart.discountAmount = 0;
+                } else {
+                    // Coupon is still applicable, recalculate discount
+                    const newDiscountAmount = calculateDiscount(coupon, newSubtotal);
+                    cart.discountAmount = newDiscountAmount;
+                }
+            } else {
+                // Coupon no longer exists in database, remove it
+                couponRemoved = true;
+                couponRemovedMessage = 'Applied coupon no longer exists';
+                cart.appliedCoupon = null;
+                cart.couponCode = null;
+                cart.discountAmount = 0;
+            }
+        } else if (cart.appliedCoupon && cart.items.length === 0) {
+            // Cart is empty, remove coupon
+            couponRemoved = true;
+            couponRemovedMessage = 'Cart is empty';
+            cart.appliedCoupon = null;
+            cart.couponCode = null;
+            cart.discountAmount = 0;
+        }
+
         // Save cart if it has items, or delete if empty
         if (cart.items.length === 0) {
             if (cart._id) {
@@ -294,7 +338,9 @@ exports.manageCartItem = async (req, res) => {
             couponCode: cart.couponCode,
             appliedCoupon: cart.appliedCoupon,
             createdAt: cart.createdAt,
-            updatedAt: cart.updatedAt
+            updatedAt: cart.updatedAt,
+            couponRemoved: couponRemoved,
+            couponRemovedMessage: couponRemoved ? couponRemovedMessage : undefined
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
