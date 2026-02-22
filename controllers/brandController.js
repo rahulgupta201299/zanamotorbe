@@ -9,7 +9,7 @@ exports.createBrand = async (req, res) => {
         await newBrand.save();
         res.status(201).json({ success: true, data: newBrand });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -21,10 +21,10 @@ exports.updateBrand = async (req, res) => {
             { name, description },
             { new: true }
         );
-        if (!brand) return res.status(404).json({ success: false, error: 'Brand not found' });
+        if (!brand) return res.status(404).json({ success: false, message: 'Brand not found' });
         res.status(200).json({ success: true, data: brand });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -33,7 +33,7 @@ exports.getAllBrands = async (req, res) => {
         const brands = await BikeBrand.find();
         res.status(200).json({ success: true, data: brands });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -85,6 +85,6 @@ exports.getBrandsWithModels = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };

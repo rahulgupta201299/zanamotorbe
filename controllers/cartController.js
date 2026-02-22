@@ -72,7 +72,7 @@ exports.validateCart = async (req, res) => {
         if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ 
                 success: false, 
-                error: 'Items array is required and cannot be empty' 
+                message: 'Items array is required and cannot be empty' 
             });
         }
 
@@ -90,7 +90,7 @@ exports.validateCart = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -118,7 +118,7 @@ exports.getActiveCart = async (req, res) => {
             data: cart
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -129,17 +129,17 @@ exports.manageCartItem = async (req, res) => {
         const { phoneNumber, items } = req.body;
 
         if (!phoneNumber) {
-            return res.status(400).json({
-                success: false,
-                error: 'phoneNumber is required'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'phoneNumber is required'
+        });
         }
 
         if (!items || !Array.isArray(items) || items.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'items array is required and cannot be empty'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'items array is required and cannot be empty'
+        });
         }
 
         let cart = await getOrCreateCart(phoneNumber);
@@ -227,7 +227,7 @@ exports.manageCartItem = async (req, res) => {
         if (errors.length > 0) {
             return res.status(400).json({
                 success: false,
-                error: 'Validation errors in request',
+                message: 'Validation errors in request',
                 errors
             });
         }
@@ -295,7 +295,7 @@ exports.manageCartItem = async (req, res) => {
             updatedAt: cart.updatedAt
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -307,18 +307,18 @@ exports.clearCart = async (req, res) => {
         const { phoneNumber } = req.body;
 
         if (!phoneNumber) {
-            return res.status(400).json({
-                success: false,
-                error: 'phoneNumber is required'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'phoneNumber is required'
+        });
         }
 
         const cart = await Cart.findOne({ phoneNumber, status: 'active' });
         if (!cart) {
-            return res.status(404).json({
-                success: false,
-                error: 'Active cart not found'
-            });
+        return res.status(404).json({
+            success: false,
+            message: 'Active cart not found'
+        });
         }
 
         // Delete the cart since it's being cleared (becomes empty)
@@ -338,7 +338,7 @@ exports.clearCart = async (req, res) => {
             data: emptyCart
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -348,18 +348,18 @@ exports.updateCartAddresses = async (req, res) => {
         const { phoneNumber, shippingAddress, billingAddress, emailId, shippingAddressSameAsBillingAddress } = req.body;
 
         if (!phoneNumber) {
-            return res.status(400).json({
-                success: false,
-                error: 'phoneNumber is required'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'phoneNumber is required'
+        });
         }
 
         const cart = await Cart.findOne({ phoneNumber, status: 'active' });
         if (!cart) {
-            return res.status(404).json({
-                success: false,
-                error: 'Active cart not found'
-            });
+        return res.status(404).json({
+            success: false,
+            message: 'Active cart not found'
+        });
         }
 
         if (shippingAddress) cart.shippingAddress = shippingAddress;
@@ -380,7 +380,7 @@ exports.updateCartAddresses = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -450,32 +450,32 @@ exports.applyCoupon = async (req, res) => {
         const { phoneNumber, couponCode } = req.body;
 
         if (!phoneNumber) {
-            return res.status(400).json({
-                success: false,
-                error: 'phoneNumber is required'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'phoneNumber is required'
+        });
         }
 
         if (!couponCode) {
-            return res.status(400).json({
-                success: false,
-                error: 'couponCode is required'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'couponCode is required'
+        });
         }
 
         const cart = await Cart.findOne({ phoneNumber, status: 'active' });
         if (!cart) {
-            return res.status(404).json({
-                success: false,
-                error: 'Active cart not found'
-            });
+        return res.status(404).json({
+            success: false,
+            message: 'Active cart not found'
+        });
         }
 
         if (cart.items.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'Cart is empty'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'Cart is empty'
+        });
         }
 
         // Find coupon
@@ -485,10 +485,10 @@ exports.applyCoupon = async (req, res) => {
         });
 
         if (!coupon) {
-            return res.status(404).json({
-                success: false,
-                error: 'Invalid coupon code'
-            });
+        return res.status(404).json({
+            success: false,
+            message: 'Invalid coupon code'
+        });
         }
 
         // Calculate current subtotal
@@ -499,7 +499,7 @@ exports.applyCoupon = async (req, res) => {
         if (!eligibility.isValid) {
             return res.status(400).json({
                 success: false,
-                error: eligibility.message
+                message: eligibility.message
             });
         }
 
@@ -527,7 +527,7 @@ exports.applyCoupon = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -537,25 +537,25 @@ exports.removeCoupon = async (req, res) => {
         const { phoneNumber } = req.body;
 
         if (!phoneNumber) {
-            return res.status(400).json({
-                success: false,
-                error: 'phoneNumber is required'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'phoneNumber is required'
+        });
         }
 
         const cart = await Cart.findOne({ phoneNumber, status: 'active' });
         if (!cart) {
-            return res.status(404).json({
-                success: false,
-                error: 'Active cart not found'
-            });
+        return res.status(404).json({
+            success: false,
+            message: 'Active cart not found'
+        });
         }
 
         if (!cart.appliedCoupon) {
-            return res.status(400).json({
-                success: false,
-                error: 'No coupon applied to cart'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'No coupon applied to cart'
+        });
         }
 
         // Remove coupon
@@ -577,7 +577,7 @@ exports.removeCoupon = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -591,24 +591,24 @@ exports.checkoutCart = async (req, res) => {
         }).populate('items.product');
 
         if (!cart) {
-            return res.status(404).json({
-                success: false,
-                error: 'No active cart found'
-            });
+        return res.status(404).json({
+            success: false,
+            message: 'No active cart found'
+        });
         }
 
         if (cart.items.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'Cart is empty'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'Cart is empty'
+        });
         }
 
         if (!cart.shippingAddress || !cart.billingAddress) {
-            return res.status(400).json({
-                success: false,
-                error: 'Shipping and billing addresses are required'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'Shipping and billing addresses are required'
+        });
         }
 
         // Validate product availability before checkout
@@ -618,7 +618,7 @@ exports.checkoutCart = async (req, res) => {
         if (!allValid) {
             return res.status(400).json({
                 success: false,
-                error: 'Some products are no longer available',
+                message: 'Some products are no longer available',
                 data: validationResults
             });
         }
@@ -671,6 +671,6 @@ exports.checkoutCart = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };

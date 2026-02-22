@@ -22,7 +22,7 @@ exports.addToWishlist = async (req, res) => {
         if (!phoneNumber || !productIds || !Array.isArray(productIds) || productIds.length === 0) {
             return res.status(400).json({
                 success: false,
-                error: 'phoneNumber and productIds (array) are required'
+                message: 'phoneNumber and productIds (array) are required'
             });
         }
 
@@ -33,7 +33,7 @@ exports.addToWishlist = async (req, res) => {
             const missingIds = productIds.filter(id => !foundIds.includes(id));
             return res.status(404).json({
                 success: false,
-                error: 'Some products not found',
+                message: 'Some products not found',
                 missingProductIds: missingIds
             });
         }
@@ -78,7 +78,7 @@ exports.addToWishlist = async (req, res) => {
             data: wishlist
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -90,7 +90,7 @@ exports.getWishlist = async (req, res) => {
         if (!phoneNumber) {
             return res.status(400).json({
                 success: false,
-                error: 'phoneNumber is required'
+                message: 'phoneNumber is required'
             });
         }
 
@@ -118,7 +118,7 @@ exports.getWishlist = async (req, res) => {
             data: wishlist
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -130,7 +130,7 @@ exports.removeFromWishlist = async (req, res) => {
         if (!phoneNumber || !productIds || !Array.isArray(productIds) || productIds.length === 0) {
             return res.status(400).json({
                 success: false,
-                error: 'phoneNumber and productIds (array) are required'
+                message: 'phoneNumber and productIds (array) are required'
             });
         }
 
@@ -138,7 +138,7 @@ exports.removeFromWishlist = async (req, res) => {
         if (!wishlist) {
             return res.status(404).json({
                 success: false,
-                error: 'Wishlist not found'
+                message: 'Wishlist not found'
             });
         }
 
@@ -152,7 +152,7 @@ exports.removeFromWishlist = async (req, res) => {
         if (removedCount === 0) {
             return res.status(404).json({
                 success: false,
-                error: 'None of the products found in wishlist'
+                message: 'None of the products found in wishlist'
             });
         }
 
@@ -184,6 +184,6 @@ exports.removeFromWishlist = async (req, res) => {
             data: wishlist
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };

@@ -15,10 +15,10 @@ exports.generateOTP = async (req, res) => {
 
         // Validate required input parameters
         if (!isdCode || !phoneNumber) {
-            return res.status(400).json({
-                success: false,
-                error: 'ISD code and phone number are required'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'ISD code and phone number are required'
+        });
         }
 
         // Generate a new 6-digit OTP code
@@ -44,7 +44,7 @@ exports.generateOTP = async (req, res) => {
                 console.log('Twilio credentials not configured in environment variables');
                 return res.status(500).json({
                     success: false,
-                    error: 'SMS service is not configured. Please contact administrator.'
+                    message: 'SMS service is not configured. Please contact administrator.'
                 });
             }
 
@@ -82,7 +82,7 @@ exports.generateOTP = async (req, res) => {
 
             return res.status(500).json({
                 success: false,
-                error: 'Failed to send OTP via SMS. Please check your API configuration.'
+                message: 'Failed to send OTP via SMS. Please check your API configuration.'
             });
         }
 
@@ -90,7 +90,7 @@ exports.generateOTP = async (req, res) => {
         console.error('Error in generateOTP:', error);
         res.status(500).json({
             success: false,
-            error: 'An error occurred while generating OTP'
+            message: 'An error occurred while generating OTP'
         });
     }
 };
@@ -102,10 +102,10 @@ exports.verifyOTP = async (req, res) => {
 
         // Validate required input parameters
         if (!isdCode || !phoneNumber || !otp) {
-            return res.status(400).json({
-                success: false,
-                error: 'ISD code, phone number, and OTP are required'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'ISD code, phone number, and OTP are required'
+        });
         }
 
         // Find the most recent unverified OTP for this phone number
@@ -119,7 +119,7 @@ exports.verifyOTP = async (req, res) => {
         if (!otpRecord) {
             return res.status(400).json({
                 success: false,
-                error: 'No valid OTP found. OTP may have expired or was never sent. Please request a new OTP.'
+                message: 'No valid OTP found. OTP may have expired or was never sent. Please request a new OTP.'
             });
         }
 
@@ -127,7 +127,7 @@ exports.verifyOTP = async (req, res) => {
         if (new Date() > otpRecord.expiresAt) {
             return res.status(400).json({
                 success: false,
-                error: 'OTP has expired. Please request a new OTP.'
+                message: 'OTP has expired. Please request a new OTP.'
             });
         }
 
@@ -135,7 +135,7 @@ exports.verifyOTP = async (req, res) => {
         if (otpRecord.otp !== otp) {
             return res.status(400).json({
                 success: false,
-                error: 'Invalid OTP. Please check and try again.'
+                message: 'Invalid OTP. Please check and try again.'
             });
         }
 
@@ -173,7 +173,7 @@ exports.verifyOTP = async (req, res) => {
         console.error('Error in verifyOTP:', error);
         res.status(500).json({
             success: false,
-            error: 'An error occurred while verifying OTP'
+            message: 'An error occurred while verifying OTP'
         });
     }
 };

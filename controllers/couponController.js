@@ -51,7 +51,7 @@ exports.getAllCoupons = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -62,10 +62,10 @@ exports.getCouponById = async (req, res) => {
 
         // Validate MongoDB ObjectId
         if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid coupon ID format'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'Invalid coupon ID format'
+        });
         }
 
         const coupon = await Coupon.findById(id);
@@ -73,7 +73,7 @@ exports.getCouponById = async (req, res) => {
         if (!coupon) {
             return res.status(404).json({
                 success: false,
-                error: 'Coupon not found'
+                message: 'Coupon not found'
             });
         }
 
@@ -82,7 +82,7 @@ exports.getCouponById = async (req, res) => {
             data: coupon
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -100,7 +100,7 @@ exports.createCoupon = async (req, res) => {
         if (missingFields.length > 0) {
             return res.status(400).json({
                 success: false,
-                error: `Missing required fields: ${missingFields.join(', ')}`
+                message: `Missing required fields: ${missingFields.join(', ')}`
             });
         }
 
@@ -109,7 +109,7 @@ exports.createCoupon = async (req, res) => {
         if (!validTypes.includes(couponData.type)) {
             return res.status(400).json({
                 success: false,
-                error: 'Invalid coupon type'
+                message: 'Invalid coupon type'
             });
         }
 
@@ -117,7 +117,7 @@ exports.createCoupon = async (req, res) => {
         if (couponData.type === 'Percentage' && couponData.discount > 50 && !couponData.maxDiscount) {
             return res.status(400).json({
                 success: false,
-                error: 'High percentage coupons should have a maxDiscount limit'
+                message: 'High percentage coupons should have a maxDiscount limit'
             });
         }
 
@@ -126,7 +126,7 @@ exports.createCoupon = async (req, res) => {
         if (existingCoupon) {
             return res.status(400).json({
                 success: false,
-                error: 'Coupon code already exists'
+                message: 'Coupon code already exists'
             });
         }
 
@@ -144,7 +144,7 @@ exports.createCoupon = async (req, res) => {
             data: coupon
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -162,7 +162,7 @@ exports.updateCoupon = async (req, res) => {
             if (existingCoupon) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Coupon code already exists'
+                    message: 'Coupon code already exists'
                 });
             }
             updateData.code = updateData.code.toUpperCase();
@@ -174,7 +174,7 @@ exports.updateCoupon = async (req, res) => {
             if (!validTypes.includes(updateData.type)) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Invalid coupon type'
+                    message: 'Invalid coupon type'
                 });
             }
         }
@@ -188,7 +188,7 @@ exports.updateCoupon = async (req, res) => {
         if (!coupon) {
             return res.status(404).json({
                 success: false,
-                error: 'Coupon not found'
+                message: 'Coupon not found'
             });
         }
 
@@ -198,7 +198,7 @@ exports.updateCoupon = async (req, res) => {
             data: coupon
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -212,7 +212,7 @@ exports.deleteCoupon = async (req, res) => {
         if (!coupon) {
             return res.status(404).json({
                 success: false,
-                error: 'Coupon not found'
+                message: 'Coupon not found'
             });
         }
 
@@ -220,7 +220,7 @@ exports.deleteCoupon = async (req, res) => {
         if (coupon.usedCount > 0) {
             return res.status(400).json({
                 success: false,
-                error: 'Cannot delete coupon that has been used'
+                message: 'Cannot delete coupon that has been used'
             });
         }
 
@@ -231,7 +231,7 @@ exports.deleteCoupon = async (req, res) => {
             message: 'Coupon deleted successfully'
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -245,7 +245,7 @@ exports.toggleCouponStatus = async (req, res) => {
         if (!coupon) {
             return res.status(404).json({
                 success: false,
-                error: 'Coupon not found'
+                message: 'Coupon not found'
             });
         }
 
@@ -260,7 +260,7 @@ exports.toggleCouponStatus = async (req, res) => {
             data: coupon
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -272,7 +272,7 @@ exports.validateCouponCode = async (req, res) => {
         if (!couponCode) {
             return res.status(400).json({
                 success: false,
-                error: 'couponCode is required'
+                message: 'couponCode is required'
             });
         }
 
@@ -284,7 +284,7 @@ exports.validateCouponCode = async (req, res) => {
         if (!coupon) {
             return res.status(404).json({
                 success: false,
-                error: 'Invalid coupon code'
+                message: 'Invalid coupon code'
             });
         }
 
@@ -335,6 +335,6 @@ exports.validateCouponCode = async (req, res) => {
             data: validation
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };

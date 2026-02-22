@@ -7,7 +7,7 @@ exports.createBlog = async (req, res) => {
         await newBlog.save();
         res.status(201).json({ success: true, data: newBlog });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -41,17 +41,17 @@ exports.getAllBlogs = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
 exports.getBlogById = async (req, res) => {
     try {
         const blog = await Blog.findById(req.params.id);
-        if (!blog) return res.status(404).json({ success: false, error: 'Blog not found' });
+        if (!blog) return res.status(404).json({ success: false, message: 'Blog not found' });
         res.status(200).json({ success: true, data: blog });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -63,20 +63,20 @@ exports.updateBlog = async (req, res) => {
             { title, description, content, imageUrl },
             { new: true }
         );
-        if (!blog) return res.status(404).json({ success: false, error: 'Blog not found' });
+        if (!blog) return res.status(404).json({ success: false, message: 'Blog not found' });
         res.status(200).json({ success: true, data: blog });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
 exports.deleteBlog = async (req, res) => {
     try {
         const blog = await Blog.findByIdAndDelete(req.params.id);
-        if (!blog) return res.status(404).json({ success: false, error: 'Blog not found' });
+        if (!blog) return res.status(404).json({ success: false, message: 'Blog not found' });
         res.status(200).json({ success: true, data: { message: 'Blog deleted successfully' } });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -85,10 +85,10 @@ exports.recommendBlogsByTitle = async (req, res) => {
         const { title, limit = 10 } = req.query;
 
         if (!title) {
-            return res.status(400).json({
-                success: false,
-                error: 'Title search parameter is required'
-            });
+        return res.status(400).json({
+            success: false,
+            message: 'Title search parameter is required'
+        });
         }
 
         // Create a case-insensitive regex search for title keywords
@@ -108,6 +108,6 @@ exports.recommendBlogsByTitle = async (req, res) => {
             data: blogs
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };

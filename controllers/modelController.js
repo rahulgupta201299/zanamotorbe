@@ -7,7 +7,7 @@ exports.createModel = async (req, res) => {
         await newModel.save();
         res.status(201).json({ success: true, data: newModel });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -17,17 +17,17 @@ exports.getModelsByBrand = async (req, res) => {
         const modelData = models.map(m => ({ _id: m._id, name: m.name, category: m.category }));
         res.status(200).json({ success: true, data: modelData });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
 exports.getModelById = async (req, res) => {
     try {
         const model = await BikeModel.findById(req.params.id).populate('brand');
-        if (!model) return res.status(404).json({ success: false, error: 'Model not found' });
+        if (!model) return res.status(404).json({ success: false, message: 'Model not found' });
         res.status(200).json({ success: true, data: model });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -39,9 +39,9 @@ exports.updateModel = async (req, res) => {
             { brand, name, type, category, description, imageUrl },
             { new: true }
         ).populate('brand');
-        if (!model) return res.status(404).json({ success: false, error: 'Model not found' });
+        if (!model) return res.status(404).json({ success: false, message: 'Model not found' });
         res.status(200).json({ success: true, data: model });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, message: error.message });
     }
 }
