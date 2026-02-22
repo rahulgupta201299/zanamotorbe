@@ -291,6 +291,8 @@ exports.manageCartItem = async (req, res) => {
             discountAmount: cart.discountAmount,
             totalAmount: cart.totalAmount,
             status: cart.status,
+            couponCode: cart.couponCode,
+            appliedCoupon: cart.appliedCoupon,
             createdAt: cart.createdAt,
             updatedAt: cart.updatedAt
         });
