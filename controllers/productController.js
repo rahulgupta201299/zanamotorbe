@@ -1,6 +1,8 @@
 const BikeProduct = require('../models/BikeProduct');
 const BikeModel = require('../models/BikeModel');
 const Wishlist = require('../models/Wishlist');
+const { getConvertedPrice } = require('../utils/exchangeRate');
+const currencyList = require('../utils/currencyList');
 
 // Helper function to add isWishlist field to products
 const addIsWishlistToProducts = async (products, phoneNumber) => {
@@ -15,6 +17,61 @@ const addIsWishlistToProducts = async (products, phoneNumber) => {
         ...product.toObject(),
         isWishlist: wishlistProductIds.includes(product._id.toString())
     }));
+};
+
+// Helper function to convert product prices based on currency
+const convertProductPrices = async (products, currency) => {
+    if (!currency || currency === 'INR') {
+        return products;
+    }
+
+    // Check if valid currency
+    const validCurrency = currencyList.find(c => c.code === currency);
+    if (!validCurrency) {
+        return products;
+    }
+
+    const convertedProducts = await Promise.all(
+        products.map(async (product) => {
+            const productObj = product.toObject ? product.toObject() : product;
+            const originalPrice = productObj.price || 0;
+            const convertedPrice = await getConvertedPrice(originalPrice, currency);
+            
+            return {
+                ...productObj,
+                price: convertedPrice,
+                originalPrice: originalPrice,
+                currency: currency,
+                currencySymbol: validCurrency.symbol
+            };
+        })
+    );
+
+    return convertedProducts;
+};
+
+// Helper function to convert single product price
+const convertSingleProductPrice = async (product, currency) => {
+    if (!currency || currency === 'INR') {
+        return product;
+    }
+
+    const validCurrency = currencyList.find(c => c.code === currency);
+    if (!validCurrency) {
+        return product;
+    }
+
+    const productObj = product.toObject ? product.toObject() : product;
+    const originalPrice = productObj.price || 0;
+    const convertedPrice = await getConvertedPrice(originalPrice, currency);
+
+    return {
+        ...productObj,
+        price: convertedPrice,
+        originalPrice: originalPrice,
+        currency: currency,
+        currencySymbol: validCurrency.symbol
+    };
 };
 
 exports.createProduct = async (req, res) => {
@@ -51,7 +108,7 @@ exports.createProduct = async (req, res) => {
 
 exports.getProductsByModel = async (req, res) => {
     try {
-        const { phoneNumber } = req.query;
+        const { phoneNumber, currency } = req.query;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
@@ -64,6 +121,7 @@ exports.getProductsByModel = async (req, res) => {
             .sort({ createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
+        const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
 
         const totalPages = Math.ceil(totalProducts / limit);
         const hasNextPage = page < totalPages;
@@ -71,7 +129,7 @@ exports.getProductsByModel = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            data: productsWithWishlist,
+            data: productsWithCurrency,
             pagination: {
                 currentPage: page,
                 totalPages: totalPages,
@@ -90,11 +148,14 @@ exports.getProductsByModel = async (req, res) => {
 
 exports.getProductById = async (req, res) => {
     try {
-        const { phoneNumber } = req.query;
+        const { phoneNumber, currency } = req.query;
         const product = await BikeProduct.findById(req.params.id);
         if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+        
         const productsWithWishlist = await addIsWishlistToProducts([product], phoneNumber);
-        res.status(200).json({ success: true, data: productsWithWishlist[0] });
+        const productWithCurrency = await convertSingleProductPrice(productsWithWishlist[0], currency);
+        
+        res.status(200).json({ success: true, data: productWithCurrency });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -122,7 +183,7 @@ exports.updateProduct = async (req, res) => {
 
 exports.getProductsByCategory = async (req, res) => {
     try {
-        const { phoneNumber } = req.query;
+        const { phoneNumber, currency } = req.query;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
@@ -135,6 +196,7 @@ exports.getProductsByCategory = async (req, res) => {
             .sort({ createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
+        const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
 
         const totalPages = Math.ceil(totalProducts / limit);
         const hasNextPage = page < totalPages;
@@ -142,7 +204,7 @@ exports.getProductsByCategory = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            data: productsWithWishlist,
+            data: productsWithCurrency,
             pagination: {
                 currentPage: page,
                 totalPages: totalPages,
@@ -161,7 +223,7 @@ exports.getProductsByCategory = async (req, res) => {
 
 exports.getAllProductsPaginated = async (req, res) => {
     try {
-        const { phoneNumber } = req.query;
+        const { phoneNumber, currency } = req.query;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
@@ -174,6 +236,7 @@ exports.getAllProductsPaginated = async (req, res) => {
             .sort({ createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
+        const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
 
         const totalPages = Math.ceil(totalProducts / limit);
         const hasNextPage = page < totalPages;
@@ -181,7 +244,7 @@ exports.getAllProductsPaginated = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            data: productsWithWishlist,
+            data: productsWithCurrency,
             pagination: {
                 currentPage: page,
                 totalPages: totalPages,
@@ -200,7 +263,7 @@ exports.getAllProductsPaginated = async (req, res) => {
 
 exports.searchProducts = async (req, res) => {
     try {
-        const { query, page = 1, limit = 10 } = req.query;
+        const { query, page = 1, limit = 10, currency } = req.query;
         if (!query) {
         return res.status(400).json({ success: false, message: 'Query parameter is required' });
         }
@@ -237,11 +300,12 @@ exports.searchProducts = async (req, res) => {
             .limit(parseInt(limit))
             .sort({ createdAt: -1 });
 
+        const productsWithCurrency = await convertProductPrices(products, currency);
         const totalPages = Math.ceil(totalCount / limit);
 
         res.status(200).json({
             success: true,
-            data: products,
+            data: productsWithCurrency,
             pagination: {
                 currentPage: parseInt(page),
                 totalPages,
@@ -260,12 +324,15 @@ exports.searchProducts = async (req, res) => {
 
 exports.getCategoryCounts = async (req, res) => {
     try {
+        const { currency } = req.query;
+        
         const categoriesData = await BikeProduct.aggregate([
             {
                 $group: {
                     _id: '$category',
                     count: { $sum: 1 },
-                    categoryIcon: { $first: '$categoryIcon' }
+                    categoryIcon: { $first: '$categoryIcon' },
+                    samplePrice: { $first: '$price' }
                 }
             },
             {
@@ -281,6 +348,20 @@ exports.getCategoryCounts = async (req, res) => {
             }
         ]);
 
+        // Convert prices if currency is provided
+        if (currency && currency !== 'INR') {
+            const validCurrency = currencyList.find(c => c.code === currency);
+            if (validCurrency) {
+                for (let cat of categoriesData) {
+                    if (cat.samplePrice) {
+                        cat.price = await getConvertedPrice(cat.samplePrice, currency);
+                        cat.currency = currency;
+                        cat.currencySymbol = validCurrency.symbol;
+                    }
+                }
+            }
+        }
+
         res.status(200).json({
             success: true,
             data: categoriesData
@@ -292,8 +373,13 @@ exports.getCategoryCounts = async (req, res) => {
 
 exports.getGarageFavorites = async (req, res) => {
     try {
+        const { phoneNumber, currency } = req.query;
         const products = await BikeProduct.find({ isGarageFavorite: true });
-        res.status(200).json({ success: true, data: products });
+        
+        const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
+        const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
+        
+        res.status(200).json({ success: true, data: productsWithCurrency });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -301,8 +387,13 @@ exports.getGarageFavorites = async (req, res) => {
 
 exports.getNewArrivals = async (req, res) => {
     try {
+        const { phoneNumber, currency } = req.query;
         const products = await BikeProduct.find({ isNewArrival: true });
-        res.status(200).json({ success: true, data: products });
+        
+        const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
+        const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
+        
+        res.status(200).json({ success: true, data: productsWithCurrency });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

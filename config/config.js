@@ -15,4 +15,8 @@ module.exports = {
     // Razorpay Configuration
     RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
     RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
+
+    CROSS_CURRENCY_MULTIPLIER: process.env.CROSS_CURRENCY_MULTIPLIER,
+
+    EXCHANGE_RATE_API_KEY: process.env.EXCHANGE_RATE_API_KEY
 };
