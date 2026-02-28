@@ -9,6 +9,7 @@ router.use('/brand', require('./brand'));
 router.use('/model', require('./model'));
 router.use('/product', require('./product'));
 router.use('/cart', require('./cart'));
+router.use('/order', require('./order'));
 router.use('/coupon', require('./coupon'));
 router.use('/wishlist', require('./wishlist'));
 router.use('/payment', require('./payment'));
