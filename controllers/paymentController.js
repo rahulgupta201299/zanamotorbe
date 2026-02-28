@@ -2,6 +2,8 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const Cart = require('../models/Cart');
 const config = require('../config/config');
+const { getConvertedPrice } = require('../utils/exchangeRate');
+const currencyList = require('../utils/currencyList');
 
 // Initialize Razorpay instance
 const razorpay = new Razorpay({
@@ -12,7 +14,7 @@ const razorpay = new Razorpay({
 // Create payment order
 exports.createOrder = async (req, res) => {
     try {
-        const { phoneNumber } = req.body;
+        const { phoneNumber, currency } = req.body;
 
         if (!phoneNumber) {
             return res.status(400).json({
@@ -47,16 +49,35 @@ exports.createOrder = async (req, res) => {
             });
         }
 
-        const amount = Math.round(cart.totalAmount * 100); // Amount in paisa
+        // Handle multi-currency - Razorpay only supports INR
+        // cart.totalAmount is stored in INR in the database
+        const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
+        let amountInPaisa;
+        let displayAmount;
+        let currencySymbol;
+
+        if (validCurrency) {
+            // Convert the cart total (in INR) to the selected currency for display
+            const convertedAmount = await getConvertedPrice(cart.totalAmount, currency);
+            displayAmount = convertedAmount;
+            currencySymbol = validCurrency.symbol;
+            // Razorpay requires INR amount
+            amountInPaisa = Math.round(cart.totalAmount * 100);
+        } else {
+            displayAmount = cart.totalAmount;
+            currencySymbol = '₹';
+            amountInPaisa = Math.round(cart.totalAmount * 100);
+        }
 
         const options = {
-            amount: amount,
+            amount: amountInPaisa,
             currency: 'INR',
             receipt: `receipt_${cart._id}}`,
-            payment_capture: 1, // Auto capture
+            payment_capture: 1,
             notes: {
                 cartId: cart._id.toString(),
-                phoneNumber: phoneNumber
+                phoneNumber: phoneNumber,
+                originalCurrency: validCurrency ? currency : 'INR'
             }
         };
 
@@ -75,6 +96,9 @@ exports.createOrder = async (req, res) => {
                 orderId: order.id,
                 amount: order.amount,
                 currency: order.currency,
+                displayAmount: displayAmount,
+                displayCurrency: validCurrency ? currency : 'INR',
+                currencySymbol: currencySymbol,
                 cartId: cart._id,
                 name: "zanaltd"
             }
@@ -96,7 +120,8 @@ exports.verifyPayment = async (req, res) => {
             razorpay_order_id,
             razorpay_payment_id,
             razorpay_signature,
-            cartId
+            cartId,
+            currency
         } = req.body;
 
         if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !cartId) {
@@ -145,6 +170,21 @@ exports.verifyPayment = async (req, res) => {
 
         await cart.save();
 
+        // Handle multi-currency for response
+        // cart.totalAmount is stored in INR in the database
+        const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
+        let displayAmount;
+        let currencySymbol;
+
+        if (validCurrency) {
+            const convertedAmount = await getConvertedPrice(cart.totalAmount, currency);
+            displayAmount = convertedAmount;
+            currencySymbol = validCurrency.symbol;
+        } else {
+            displayAmount = cart.totalAmount;
+            currencySymbol = '₹';
+        }
+
         res.status(200).json({
             success: true,
             message: 'Payment verified successfully',
@@ -153,7 +193,10 @@ exports.verifyPayment = async (req, res) => {
                 orderNumber: cart.orderNumber,
                 paymentId: razorpay_payment_id,
                 orderStatus: cart.orderStatus,
-                orderDate: cart.orderDate
+                orderDate: cart.orderDate,
+                totalAmount: displayAmount,
+                displayCurrency: validCurrency ? currency : 'INR',
+                currencySymbol: currencySymbol
             }
         });
 
@@ -261,14 +304,30 @@ async function handlePaymentFailed(paymentEntity) {
 exports.getPaymentStatus = async (req, res) => {
     try {
         const { cartId } = req.params;
+        const { currency } = req.query;
 
-        const cart = await Cart.findById(cartId).select('paymentStatus razorpayOrderId razorpayPaymentId orderNumber orderStatus');
+        const cart = await Cart.findById(cartId).select('paymentStatus razorpayOrderId razorpayPaymentId orderNumber orderStatus totalAmount');
 
         if (!cart) {
             return res.status(404).json({
                 success: false,
                 error: 'Cart not found'
             });
+        }
+
+        // Handle multi-currency for response
+        // cart.totalAmount is stored in INR in the database
+        const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
+        let displayAmount;
+        let currencySymbol;
+
+        if (validCurrency && cart.totalAmount) {
+            const convertedAmount = await getConvertedPrice(cart.totalAmount, currency);
+            displayAmount = convertedAmount;
+            currencySymbol = validCurrency.symbol;
+        } else {
+            displayAmount = cart.totalAmount || 0;
+            currencySymbol = '₹';
         }
 
         res.status(200).json({
@@ -278,7 +337,10 @@ exports.getPaymentStatus = async (req, res) => {
                 orderId: cart.razorpayOrderId,
                 paymentId: cart.razorpayPaymentId,
                 orderNumber: cart.orderNumber,
-                orderStatus: cart.orderStatus
+                orderStatus: cart.orderStatus,
+                totalAmount: displayAmount,
+                displayCurrency: validCurrency ? currency : 'INR',
+                currencySymbol: currencySymbol
             }
         });
 

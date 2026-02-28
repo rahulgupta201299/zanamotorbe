@@ -1,4 +1,6 @@
 const Coupon = require('../models/Coupon');
+const { getConvertedPrice } = require('../utils/exchangeRate');
+const currencyList = require('../utils/currencyList');
 
 // Get all coupons (admin)
 exports.getAllCoupons = async (req, res) => {
@@ -267,7 +269,7 @@ exports.toggleCouponStatus = async (req, res) => {
 // Validate coupon code (public endpoint)
 exports.validateCouponCode = async (req, res) => {
     try {
-        const { couponCode, phoneNumber, cartAmount } = req.body;
+        const { couponCode, phoneNumber, cartAmount, currency } = req.body;
 
         if (!couponCode) {
             return res.status(400).json({
@@ -288,16 +290,26 @@ exports.validateCouponCode = async (req, res) => {
             });
         }
 
+        // Check if valid currency
+        const validCurrency = currency ? currencyList.find(c => c.code === currency) : null;
+        
+        // Convert coupon values based on currency
+        const convertedDiscount = validCurrency ? await getConvertedPrice(coupon.discount, currency) : coupon.discount;
+        const convertedMaxDiscount = coupon.maxDiscount ? (validCurrency ? await getConvertedPrice(coupon.maxDiscount, currency) : coupon.maxDiscount) : null;
+        const convertedMinCartAmount = validCurrency ? await getConvertedPrice(coupon.minCartAmount, currency) : coupon.minCartAmount;
+
         // Basic validation
         const validation = {
             isValid: true,
             coupon: {
                 code: coupon.code,
                 type: coupon.type,
-                discount: coupon.discount,
-                maxDiscount: coupon.maxDiscount,
-                minCartAmount: coupon.minCartAmount,
-                description: coupon.description
+                discount: convertedDiscount,
+                maxDiscount: convertedMaxDiscount,
+                minCartAmount: convertedMinCartAmount,
+                description: coupon.description,
+                currency: currency || 'INR',
+                currencySymbol: validCurrency ? validCurrency.symbol : '₹'
             },
             errors: []
         };
@@ -308,10 +320,10 @@ exports.validateCouponCode = async (req, res) => {
             validation.errors.push('Coupon has expired');
         }
 
-        // Check minimum cart amount
-        if (cartAmount !== undefined && cartAmount < coupon.minCartAmount) {
+        // Check minimum cart amount (use converted values if currency provided)
+        if (cartAmount !== undefined && cartAmount < convertedMinCartAmount) {
             validation.isValid = false;
-            validation.errors.push(`Minimum cart amount of ₹${coupon.minCartAmount} required`);
+            validation.errors.push(`Minimum cart amount of ${validCurrency ? validCurrency.symbol : '₹'}${convertedMinCartAmount} required`);
         }
 
         // Check usage limits

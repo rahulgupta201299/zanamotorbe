@@ -1,5 +1,41 @@
 const Wishlist = require('../models/Wishlist');
 const BikeProduct = require('../models/BikeProduct');
+const { getConvertedPrice } = require('../utils/exchangeRate');
+const currencyList = require('../utils/currencyList');
+
+// Helper function to convert product prices based on currency
+const convertProductPrices = async (products, currency) => {
+    if (!products || !Array.isArray(products) || products.length === 0) {
+        return products;
+    }
+
+    if (!currency || currency === 'INR') {
+        return products;
+    }
+
+    const validCurrency = currencyList.find(c => c.code === currency);
+    if (!validCurrency) {
+        return products;
+    }
+
+    const convertedProducts = await Promise.all(
+        products.map(async (product) => {
+            const productObj = product.toObject ? product.toObject() : product;
+            const originalPrice = productObj.price || 0;
+            const convertedPrice = await getConvertedPrice(originalPrice, currency);
+
+            return {
+                ...productObj,
+                price: convertedPrice,
+                originalPrice: originalPrice,
+                currency: currency,
+                currencySymbol: validCurrency.symbol
+            };
+        })
+    );
+
+    return convertedProducts;
+};
 
 // Helper function to get or create wishlist
 const getOrCreateWishlist = async (phoneNumber) => {
@@ -86,6 +122,7 @@ exports.addToWishlist = async (req, res) => {
 exports.getWishlist = async (req, res) => {
     try {
         const { phoneNumber } = req.params;
+        const { currency } = req.query;
 
         if (!phoneNumber) {
             return res.status(400).json({
@@ -113,9 +150,23 @@ exports.getWishlist = async (req, res) => {
             });
         }
 
+        // Convert product prices based on currency
+        const convertedProducts = await convertProductPrices(wishlist.products, currency);
+        
+        const wishlistObj = wishlist.toObject();
+        wishlistObj.products = convertedProducts;
+        
+        if (currency && currency !== 'INR') {
+            const validCurrency = currencyList.find(c => c.code === currency);
+            if (validCurrency) {
+                wishlistObj.currency = currency;
+                wishlistObj.currencySymbol = validCurrency.symbol;
+            }
+        }
+
         res.status(200).json({
             success: true,
-            data: wishlist
+            data: wishlistObj
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
