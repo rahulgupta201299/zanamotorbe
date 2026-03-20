@@ -1,4 +1,4 @@
 node_modules
-.env
 dummy_data.js
 *.md
+config.bat
