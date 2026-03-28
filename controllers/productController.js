@@ -269,14 +269,22 @@ exports.searchProducts = async (req, res) => {
         }
         const skip = (page - 1) * parseInt(limit);
 
-        const matchingModels = await BikeModel.find({ name: { $regex: new RegExp(query, 'i') } }).select('_id');
+        // Decode URL-encoded query to handle spaces (%20, + etc.)
+        let decodedQuery = decodeURIComponent(query);
+        
+        // Escape special regex characters and handle spaces
+        const escapedQuery = decodedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, ' ').trim();
+        const caseInsensitiveRegex = { $regex: escapedQuery, $options: 'i' };
+
+        const matchingModels = await BikeModel.find({ name: caseInsensitiveRegex }).select('_id');
         const modelIds = matchingModels.map(m => m._id);
 
         const totalCount = await BikeProduct.countDocuments({
             $and: [
                 {
                     $or: [
-                        { name: { $regex: new RegExp(query, 'i') } },
+                        { name: caseInsensitiveRegex },
+                        { productCode: caseInsensitiveRegex },
                         { model: { $in: modelIds } }
                     ]
                 },
@@ -288,14 +296,15 @@ exports.searchProducts = async (req, res) => {
             $and: [
                 {
                     $or: [
-                        { name: { $regex: new RegExp(query, 'i') } },
+                        { name: caseInsensitiveRegex },
+                        { productCode: caseInsensitiveRegex },
                         { model: { $in: modelIds } }
                     ]
                 },
                 { quantityAvailable: { $gt: 0 } }
             ]
         })
-            .select('name _id shortDescription price imageUrl category')
+            .select('name _id shortDescription price imageUrl category productCode')
             .skip(skip)
             .limit(parseInt(limit))
             .sort({ createdAt: -1 });
