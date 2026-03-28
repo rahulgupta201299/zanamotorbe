@@ -672,35 +672,40 @@ exports.applyCoupon = async (req, res) => {
         // Calculate discount
         const discountAmount = calculateDiscount(coupon, subtotal);
 
+        // Update cart with subtotal and recalculate totalAmount
+        cart.subtotal = subtotal;
+        cart.discountAmount = discountAmount;
+        cart.totalAmount = subtotal - discountAmount + (cart.shippingCost || 0) + (cart.taxAmount || 0);
+
         // Apply coupon to cart
         cart.appliedCoupon = coupon._id;
         cart.couponCode = coupon.code;
-        cart.discountAmount = discountAmount;
 
         await cart.save();
 
-        // Convert prices based on currency
-        const validCurrency = currency ? currencyList.find(c => c.code === currency) : null;
-        const convertedDiscountAmount = validCurrency ? await getConvertedPrice(discountAmount, currency) : discountAmount;
-        const convertedTotalAmount = validCurrency ? await getConvertedPrice(cart.totalAmount, currency) : cart.totalAmount;
-        const convertedSubtotal = validCurrency ? await getConvertedPrice(subtotal, currency) : subtotal;
-        const convertedShippingCost = validCurrency ? await getConvertedPrice(cart.shippingCost || 0, currency) : cart.shippingCost;
-        const convertedTaxAmount = validCurrency ? await getConvertedPrice(cart.taxAmount || 0, currency) : cart.taxAmount;
+        // Re-fetch the cart to get the updated values after save
+        const updatedCart = await Cart.findById(cart._id);
+
+        // Convert prices based on currency (only convert if currency is not INR)
+        const shouldConvert = currency && currency !== 'INR';
+        const validCurrency = shouldConvert ? currencyList.find(c => c.code === currency) : null;
+        
+        const responseData = {
+            couponCode: coupon.code,
+            couponType: coupon.type,
+            subtotal: shouldConvert ? await getConvertedPrice(updatedCart.subtotal, currency) : updatedCart.subtotal,
+            discountAmount: shouldConvert ? await getConvertedPrice(updatedCart.discountAmount, currency) : updatedCart.discountAmount,
+            totalAmount: shouldConvert ? await getConvertedPrice(updatedCart.totalAmount, currency) : updatedCart.totalAmount,
+            shippingCost: shouldConvert ? await getConvertedPrice(updatedCart.shippingCost || 0, currency) : (updatedCart.shippingCost || 0),
+            taxAmount: shouldConvert ? await getConvertedPrice(updatedCart.taxAmount || 0, currency) : (updatedCart.taxAmount || 0),
+            currency: currency || 'INR',
+            currencySymbol: validCurrency ? validCurrency.symbol : '₹'
+        };
 
         res.status(200).json({
             success: true,
             message: 'Coupon applied successfully',
-            data: {
-                couponCode: coupon.code,
-                couponType: coupon.type,
-                discountAmount: convertedDiscountAmount,
-                totalAmount: convertedTotalAmount,
-                subtotal: convertedSubtotal,
-                shippingCost: convertedShippingCost,
-                taxAmount: convertedTaxAmount,
-                currency: currency || 'INR',
-                currencySymbol: validCurrency ? validCurrency.symbol : '₹'
-            }
+            data: responseData
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
