@@ -9,13 +9,34 @@ const convertProductPrices = async (products, currency) => {
         return products;
     }
 
+    // Get INR info for default currency
+    const inrCurrency = currencyList.find(c => c.code === 'INR');
+
     if (!currency || currency === 'INR') {
-        return products;
+        // For INR, still add currency info for consistency
+        const convertedProducts = products.map((product) => {
+            const productObj = product.toObject ? product.toObject() : product;
+            return {
+                ...productObj,
+                currency: 'INR',
+                currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+            };
+        });
+        return convertedProducts;
     }
 
     const validCurrency = currencyList.find(c => c.code === currency);
     if (!validCurrency) {
-        return products;
+        // Return with INR info if currency is invalid
+        const convertedProducts = products.map((product) => {
+            const productObj = product.toObject ? product.toObject() : product;
+            return {
+                ...productObj,
+                currency: 'INR',
+                currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+            };
+        });
+        return convertedProducts;
     }
 
     const convertedProducts = await Promise.all(
@@ -156,12 +177,19 @@ exports.getWishlist = async (req, res) => {
         const wishlistObj = wishlist.toObject();
         wishlistObj.products = convertedProducts;
         
+        // Get INR info for default currency
+        const inrCurrency = currencyList.find(c => c.code === 'INR');
+        
         if (currency && currency !== 'INR') {
             const validCurrency = currencyList.find(c => c.code === currency);
             if (validCurrency) {
                 wishlistObj.currency = currency;
                 wishlistObj.currencySymbol = validCurrency.symbol;
             }
+        } else {
+            // Always include INR currency info for consistency
+            wishlistObj.currency = 'INR';
+            wishlistObj.currencySymbol = inrCurrency ? inrCurrency.symbol : '₹';
         }
 
         res.status(200).json({

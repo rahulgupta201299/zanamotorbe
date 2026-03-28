@@ -9,13 +9,74 @@ const convertOrderPrices = async (order, currency) => {
         return order;
     }
 
+    // Get INR info for default currency
+    const inrCurrency = currencyList.find(c => c.code === 'INR');
+
     if (!currency || currency === 'INR') {
-        return order;
+        // For INR, still add currency info for consistency
+        const orderObj = order.toObject ? order.toObject() : order;
+        
+        const convertedItems = orderObj.items.map((item) => {
+            const itemObj = item.toObject ? item.toObject() : item;
+            let convertedProduct = itemObj.product;
+            
+            if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
+                const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
+                convertedProduct = {
+                    ...productObj,
+                    currency: 'INR',
+                    currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+                };
+            }
+
+            return {
+                ...itemObj,
+                product: convertedProduct,
+                currency: 'INR',
+                currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+            };
+        });
+
+        return {
+            ...orderObj,
+            items: convertedItems,
+            currency: 'INR',
+            currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+        };
     }
 
     const validCurrency = currencyList.find(c => c.code === currency);
     if (!validCurrency) {
-        return order;
+        // Return with INR info if currency is invalid
+        const orderObj = order.toObject ? order.toObject() : order;
+        
+        const convertedItems = orderObj.items.map((item) => {
+            const itemObj = item.toObject ? item.toObject() : item;
+            let convertedProduct = itemObj.product;
+            
+            if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
+                const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
+                convertedProduct = {
+                    ...productObj,
+                    currency: 'INR',
+                    currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+                };
+            }
+
+            return {
+                ...itemObj,
+                product: convertedProduct,
+                currency: 'INR',
+                currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+            };
+        });
+
+        return {
+            ...orderObj,
+            items: convertedItems,
+            currency: 'INR',
+            currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+        };
     }
 
     const orderObj = order.toObject ? order.toObject() : order;

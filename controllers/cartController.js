@@ -29,13 +29,74 @@ const convertCartPrices = async (cart, currency) => {
         return cart;
     }
 
+    // Get INR info for default currency
+    const inrCurrency = currencyList.find(c => c.code === 'INR');
+
     if (!currency || currency === 'INR') {
-        return cart;
+        // For INR, still add currency info for consistency
+        const cartObj = cart.toObject ? cart.toObject() : cart;
+        
+        const convertedItems = cartObj.items.map((item) => {
+            const itemObj = item.toObject ? item.toObject() : item;
+            let convertedProduct = itemObj.product;
+            
+            if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
+                const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
+                convertedProduct = {
+                    ...productObj,
+                    currency: 'INR',
+                    currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+                };
+            }
+
+            return {
+                ...itemObj,
+                product: convertedProduct,
+                currency: 'INR',
+                currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+            };
+        });
+
+        return {
+            ...cartObj,
+            items: convertedItems,
+            currency: 'INR',
+            currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+        };
     }
 
     const validCurrency = currencyList.find(c => c.code === currency);
     if (!validCurrency) {
-        return cart;
+        // Return with INR info if currency is invalid
+        const cartObj = cart.toObject ? cart.toObject() : cart;
+        
+        const convertedItems = cartObj.items.map((item) => {
+            const itemObj = item.toObject ? item.toObject() : item;
+            let convertedProduct = itemObj.product;
+            
+            if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
+                const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
+                convertedProduct = {
+                    ...productObj,
+                    currency: 'INR',
+                    currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+                };
+            }
+
+            return {
+                ...itemObj,
+                product: convertedProduct,
+                currency: 'INR',
+                currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+            };
+        });
+
+        return {
+            ...cartObj,
+            items: convertedItems,
+            currency: 'INR',
+            currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+        };
     }
 
     // Convert item prices
@@ -104,20 +165,80 @@ const convertValidationResults = async (results, currency) => {
         return results;
     }
 
+    // Get INR info for default currency
+    const inrCurrency = currencyList.find(c => c.code === 'INR');
+
     if (!currency || currency === 'INR') {
-        return results;
+        // For INR, still add currency info for consistency
+        const convertedResults = results.map((result) => {
+            let convertedProduct = result.product;
+            
+            if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
+                const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
+                convertedProduct = {
+                    ...productObj,
+                    currency: 'INR',
+                    currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+                };
+            }
+
+            return {
+                ...result,
+                product: convertedProduct,
+                currency: 'INR',
+                currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+            };
+        });
+        return convertedResults;
     }
 
     const validCurrency = currencyList.find(c => c.code === currency);
     if (!validCurrency) {
-        return results;
+        // Return with INR info if currency is invalid
+        const convertedResults = results.map((result) => {
+            let convertedProduct = result.product;
+            
+            if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
+                const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
+                convertedProduct = {
+                    ...productObj,
+                    currency: 'INR',
+                    currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+                };
+            }
+
+            return {
+                ...result,
+                product: convertedProduct,
+                currency: 'INR',
+                currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+            };
+        });
+        return convertedResults;
     }
 
     const convertedResults = await Promise.all(
         results.map(async (result) => {
             const convertedPrice = await getConvertedPrice(result.price || 0, currency);
+            let convertedProduct = result.product;
+            
+            if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
+                const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
+                const productOriginalPrice = productObj.price || 0;
+                const productConvertedPrice = await getConvertedPrice(productOriginalPrice, currency);
+                
+                convertedProduct = {
+                    ...productObj,
+                    price: productConvertedPrice,
+                    originalPrice: productOriginalPrice,
+                    currency: currency,
+                    currencySymbol: validCurrency.symbol
+                };
+            }
+
             return {
                 ...result,
+                product: convertedProduct,
                 price: convertedPrice,
                 originalPrice: result.price,
                 currency: currency,

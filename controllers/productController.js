@@ -21,14 +21,39 @@ const addIsWishlistToProducts = async (products, phoneNumber) => {
 
 // Helper function to convert product prices based on currency
 const convertProductPrices = async (products, currency) => {
-    if (!currency || currency === 'INR') {
+    if (!products || !Array.isArray(products) || products.length === 0) {
         return products;
+    }
+
+    // Get INR info for default currency
+    const inrCurrency = currencyList.find(c => c.code === 'INR');
+    
+    if (!currency || currency === 'INR') {
+        // For INR, still add currency info for consistency
+        const convertedProducts = products.map((product) => {
+            const productObj = product.toObject ? product.toObject() : product;
+            return {
+                ...productObj,
+                currency: 'INR',
+                currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+            };
+        });
+        return convertedProducts;
     }
 
     // Check if valid currency
     const validCurrency = currencyList.find(c => c.code === currency);
     if (!validCurrency) {
-        return products;
+        // Return with INR info if currency is invalid
+        const convertedProducts = products.map((product) => {
+            const productObj = product.toObject ? product.toObject() : product;
+            return {
+                ...productObj,
+                currency: 'INR',
+                currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+            };
+        });
+        return convertedProducts;
     }
 
     const convertedProducts = await Promise.all(
@@ -52,13 +77,28 @@ const convertProductPrices = async (products, currency) => {
 
 // Helper function to convert single product price
 const convertSingleProductPrice = async (product, currency) => {
+    // Get INR info for default currency
+    const inrCurrency = currencyList.find(c => c.code === 'INR');
+    
     if (!currency || currency === 'INR') {
-        return product;
+        // For INR, still add currency info for consistency
+        const productObj = product.toObject ? product.toObject() : product;
+        return {
+            ...productObj,
+            currency: 'INR',
+            currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+        };
     }
 
     const validCurrency = currencyList.find(c => c.code === currency);
     if (!validCurrency) {
-        return product;
+        // Return with INR info if currency is invalid
+        const productObj = product.toObject ? product.toObject() : product;
+        return {
+            ...productObj,
+            currency: 'INR',
+            currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
+        };
     }
 
     const productObj = product.toObject ? product.toObject() : product;
@@ -347,6 +387,9 @@ exports.getCategoryCounts = async (req, res) => {
             }
         ]);
 
+        // Get INR info for default currency
+        const inrCurrency = currencyList.find(c => c.code === 'INR');
+
         // Convert prices if currency is provided
         if (currency && currency !== 'INR') {
             const validCurrency = currencyList.find(c => c.code === currency);
@@ -357,6 +400,14 @@ exports.getCategoryCounts = async (req, res) => {
                         cat.currency = currency;
                         cat.currencySymbol = validCurrency.symbol;
                     }
+                }
+            }
+        } else {
+            // Always include INR currency info for consistency
+            for (let cat of categoriesData) {
+                if (cat.samplePrice) {
+                    cat.currency = 'INR';
+                    cat.currencySymbol = inrCurrency ? inrCurrency.symbol : '₹';
                 }
             }
         }
