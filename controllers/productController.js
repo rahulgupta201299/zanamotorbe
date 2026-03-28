@@ -118,7 +118,7 @@ exports.getProductsByModel = async (req, res) => {
         const products = await BikeProduct.find({ model: req.params.modelId })
             .skip(skip)
             .limit(limit)
-            .sort({ createdAt: -1 });
+            .sort({ quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -193,7 +193,7 @@ exports.getProductsByCategory = async (req, res) => {
         const products = await BikeProduct.find({ category: { $regex: new RegExp(req.params.category, 'i') } })
             .skip(skip)
             .limit(limit)
-            .sort({ createdAt: -1 });
+            .sort({ quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -233,7 +233,7 @@ exports.getAllProductsPaginated = async (req, res) => {
         const products = await BikeProduct.find()
             .skip(skip)
             .limit(limit)
-            .sort({ createdAt: -1 });
+            .sort({ quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -280,34 +280,24 @@ exports.searchProducts = async (req, res) => {
         const modelIds = matchingModels.map(m => m._id);
 
         const totalCount = await BikeProduct.countDocuments({
-            $and: [
-                {
-                    $or: [
-                        { name: caseInsensitiveRegex },
-                        { productCode: caseInsensitiveRegex },
-                        { model: { $in: modelIds } }
-                    ]
-                },
-                { quantityAvailable: { $gt: 0 } }
+            $or: [
+                { name: caseInsensitiveRegex },
+                { productCode: caseInsensitiveRegex },
+                { model: { $in: modelIds } }
             ]
         });
 
         const products = await BikeProduct.find({
-            $and: [
-                {
-                    $or: [
-                        { name: caseInsensitiveRegex },
-                        { productCode: caseInsensitiveRegex },
-                        { model: { $in: modelIds } }
-                    ]
-                },
-                { quantityAvailable: { $gt: 0 } }
+            $or: [
+                { name: caseInsensitiveRegex },
+                { productCode: caseInsensitiveRegex },
+                { model: { $in: modelIds } }
             ]
         })
-            .select('name _id shortDescription price imageUrl category productCode')
+            .select('name _id shortDescription price imageUrl category productCode quantityAvailable')
             .skip(skip)
             .limit(parseInt(limit))
-            .sort({ createdAt: -1 });
+            .sort({ quantityAvailable: -1, createdAt: -1 });
 
         const productsWithCurrency = await convertProductPrices(products, currency);
         const totalPages = Math.ceil(totalCount / limit);
@@ -383,7 +373,8 @@ exports.getCategoryCounts = async (req, res) => {
 exports.getGarageFavorites = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
-        const products = await BikeProduct.find({ isGarageFavorite: true });
+        const products = await BikeProduct.find({ isGarageFavorite: true })
+            .sort({ quantityAvailable: -1, createdAt: -1 });
         
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -397,7 +388,8 @@ exports.getGarageFavorites = async (req, res) => {
 exports.getNewArrivals = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
-        const products = await BikeProduct.find({ isNewArrival: true });
+        const products = await BikeProduct.find({ isNewArrival: true })
+            .sort({ quantityAvailable: -1, createdAt: -1 });
         
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
