@@ -73,8 +73,45 @@ const getConvertedPrice = async (priceInINR, targetCurrency) => {
     return Math.round((convertedPrice * multiplier) * 100) / 100;
 };
 
+/**
+ * Reverse converts price from other currency to INR
+ * @param {number} price - Price in source currency (e.g., USD)
+ * @param {string} sourceCurrency - Source currency code (USD, EUR, GBP)
+ * @returns {Promise<number>} Price in INR
+ */
+const reverseConvertCurrency = async (price, sourceCurrency) => {
+    if (!sourceCurrency || sourceCurrency === 'INR') {
+        return price;
+    }
+
+    const rates = await fetchExchangeRates();
+    const exchangeRate = rates[sourceCurrency];
+    
+    if (!exchangeRate) {
+        console.warn(`Exchange rate for ${sourceCurrency} not found, returning original price`);
+        return price;
+    }
+
+    // Convert from source currency to INR (divide by the rate)
+    return price / exchangeRate;
+};
+
+/**
+ * Reverse converts price and applies multiplier (for payment processing)
+ * @param {number} price - Price in source currency (e.g., USD)
+ * @param {string} sourceCurrency - Source currency code (USD, EUR, GBP)
+ * @returns {Promise<number>} Price in INR with multiplier applied (rounded to 2 decimals)
+ */
+const getReverseConvertedPrice = async (price, sourceCurrency) => {
+    const multiplier = parseFloat(process.env.CROSS_CURRENCY_MULTIPLIER) || 1;
+    const convertedPrice = await reverseConvertCurrency(price, sourceCurrency);
+    return Math.round((convertedPrice * multiplier) * 100) / 100;
+};
+
 module.exports = {
     fetchExchangeRates,
     convertCurrency,
-    getConvertedPrice
+    getConvertedPrice,
+    reverseConvertCurrency,
+    getReverseConvertedPrice
 };

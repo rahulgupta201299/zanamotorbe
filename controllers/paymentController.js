@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const Cart = require('../models/Cart');
 const BikeProduct = require('../models/BikeProduct');
 const config = require('../config/config');
-const { getConvertedPrice } = require('../utils/exchangeRate');
+const { getConvertedPrice, getReverseConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
 
 // Initialize Razorpay instance
@@ -62,8 +62,9 @@ exports.createOrder = async (req, res) => {
             const convertedAmount = await getConvertedPrice(cart.totalAmount, currency);
             displayAmount = convertedAmount;
             currencySymbol = validCurrency.symbol;
-            // Razorpay requires INR amount
-            amountInPaisa = Math.round(cart.totalAmount * 100);
+            // Use reverse conversion to convert from selected currency back to INR
+            const amountInINR = await getReverseConvertedPrice(convertedAmount, currency);
+            amountInPaisa = Math.round(amountInINR * 100);
         } else {
             displayAmount = cart.totalAmount;
             currencySymbol = '₹';
