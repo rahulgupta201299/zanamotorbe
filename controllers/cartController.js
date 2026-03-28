@@ -362,7 +362,6 @@ exports.getActiveCart = async (req, res) => {
 // Manage cart item (add/update/remove multiple items)
 exports.manageCartItem = async (req, res) => {
     try {
-        console.log('inside mangecartitem')
         const { phoneNumber, items, currency } = req.body;
 
         if (!phoneNumber) {
@@ -579,7 +578,8 @@ exports.manageCartItem = async (req, res) => {
             updatedAt: convertedCart.updatedAt,
             couponRemoved: couponRemoved,
             couponRemovedMessage: couponRemoved ? couponRemovedMessage : undefined,
-            currency: currency || 'INR'
+            currency: convertedCart.currency || currency || 'INR',
+            currencySymbol: convertedCart.currencySymbol || '₹'
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
