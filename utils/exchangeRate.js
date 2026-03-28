@@ -103,9 +103,8 @@ const reverseConvertCurrency = async (price, sourceCurrency) => {
  * @returns {Promise<number>} Price in INR with multiplier applied (rounded to 2 decimals)
  */
 const getReverseConvertedPrice = async (price, sourceCurrency) => {
-    const multiplier = parseFloat(process.env.CROSS_CURRENCY_MULTIPLIER) || 1;
     const convertedPrice = await reverseConvertCurrency(price, sourceCurrency);
-    return Math.round((convertedPrice * multiplier) * 100) / 100;
+    return Math.round((convertedPrice) * 100) / 100;
 };
 
 module.exports = {
