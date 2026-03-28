@@ -1,6 +1,7 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const Cart = require('../models/Cart');
+const BikeProduct = require('../models/BikeProduct');
 const config = require('../config/config');
 const { getConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
@@ -170,6 +171,16 @@ exports.verifyPayment = async (req, res) => {
 
         await cart.save();
 
+        // Reduce product quantity in inventory
+        if (cart.items && cart.items.length > 0) {
+            for (const item of cart.items) {
+                await BikeProduct.findByIdAndUpdate(
+                    item.product,
+                    { $inc: { quantityAvailable: -item.quantity } }
+                );
+            }
+        }
+
         // Handle multi-currency for response
         // cart.totalAmount is stored in INR in the database
         const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
@@ -273,6 +284,16 @@ async function handlePaymentCaptured(paymentEntity) {
 
             cart.orderDate = new Date();
             await cart.save();
+
+            // Reduce product quantity in inventory
+            if (cart.items && cart.items.length > 0) {
+                for (const item of cart.items) {
+                    await BikeProduct.findByIdAndUpdate(
+                        item.product,
+                        { $inc: { quantityAvailable: -item.quantity } }
+                    );
+                }
+            }
 
             console.log('Payment captured for order:', cart.orderNumber);
         }
