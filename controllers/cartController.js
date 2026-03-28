@@ -348,8 +348,6 @@ exports.manageCartItem = async (req, res) => {
             });
         }
 
-                    console.log(cart)
-
         // Validate product availability for all cart items at the end
         if (cart.items.length > 0) {
             const validationResults = await validateProductAvailability(cart.items.map(item => ({ productId: item.product, quantity: item.quantity })));
@@ -648,7 +646,7 @@ exports.applyCoupon = async (req, res) => {
 
         // Find coupon
         const coupon = await Coupon.findOne({
-            code: couponCode.toUpperCase(),
+            code: couponCode,
             isActive: true
         });
 
