@@ -14,7 +14,4 @@ router.post('/validate', cartController.validateCart);
 router.post('/apply-coupon', cartController.applyCoupon);
 router.post('/remove-coupon', cartController.removeCoupon);
 
-// Checkout process
-router.post('/checkout', cartController.checkoutCart);
-
 module.exports = router;
