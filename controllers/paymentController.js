@@ -1,6 +1,7 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const Cart = require('../models/Cart');
+const Order = require('../models/Order');
 const BikeProduct = require('../models/BikeProduct');
 const config = require('../config/config');
 const { getConvertedPrice, getReverseConvertedPrice } = require('../utils/exchangeRate');
@@ -74,7 +75,7 @@ exports.createOrder = async (req, res) => {
         const options = {
             amount: amountInPaisa,
             currency: 'INR',
-            receipt: `receipt_${cart._id}}`,
+            receipt: `receipt_${cart._id}`,
             payment_capture: 1,
             notes: {
                 cartId: cart._id.toString(),
@@ -84,20 +85,21 @@ exports.createOrder = async (req, res) => {
         };
 
         // Create Razorpay order
-        const order = await razorpay.orders.create(options);
+        const razorpayOrder = await razorpay.orders.create(options);
 
         // Update cart with order details
-        cart.razorpayOrderId = order.id;
+        cart.razorpayOrderId = razorpayOrder.id;
         cart.paymentMethod = 'online';
         cart.paymentStatus = 'pending';
+        cart.status = 'checkout';
         await cart.save();
 
         res.status(200).json({
             success: true,
             data: {
-                orderId: order.id,
-                amount: order.amount,
-                currency: order.currency,
+                orderId: razorpayOrder.id,
+                amount: razorpayOrder.amount,
+                currency: razorpayOrder.currency,
                 displayAmount: displayAmount,
                 displayCurrency: validCurrency ? currency : 'INR',
                 currencySymbol: currencySymbol,
@@ -147,8 +149,8 @@ exports.verifyPayment = async (req, res) => {
             });
         }
 
-        // Find and update cart
-        const cart = await Cart.findById(cartId);
+        // Find cart
+        const cart = await Cart.findById(cartId).populate('items.product');
         if (!cart) {
             return res.status(404).json({
                 success: false,
@@ -156,56 +158,87 @@ exports.verifyPayment = async (req, res) => {
             });
         }
 
-        // Update cart with payment details
-        cart.razorpayPaymentId = razorpay_payment_id;
-        cart.razorpaySignature = razorpay_signature;
-        cart.paymentStatus = 'paid';
-        cart.status = 'ordered';
+        // Generate order number
+        const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-        // Generate order number if not present
-        if (!cart.orderNumber) {
-            cart.orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-        }
+        // Get currency info
+        const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
+        const currencySymbol = validCurrency ? validCurrency.symbol : '₹';
 
-        cart.orderDate = new Date();
-        cart.orderStatus = 'confirmed';
+        // Prepare order items with product details
+        const orderItems = cart.items.map(item => ({
+            product: item.product._id,
+            productName: item.product.name || 'Unknown Product',
+            productImage: item.product.images ? item.product.images[0] : null,
+            quantity: item.quantity,
+            price: item.price,
+            totalPrice: item.totalPrice
+        }));
 
-        await cart.save();
+        // Create Order document
+        const order = new Order({
+            orderNumber: orderNumber,
+            phoneNumber: cart.phoneNumber,
+            emailId: cart.emailId,
+            items: orderItems,
+            shippingAddress: cart.shippingAddress,
+            billingAddress: cart.billingAddress,
+            shippingAddressSameAsBillingAddress: cart.shippingAddressSameAsBillingAddress,
+            subtotal: cart.subtotal,
+            shippingCost: cart.shippingCost,
+            taxAmount: cart.taxAmount,
+            discountAmount: cart.discountAmount,
+            couponCode: cart.couponCode,
+            totalAmount: cart.totalAmount,
+            currency: validCurrency ? currency : 'INR',
+            currencySymbol: currencySymbol,
+            paymentMethod: cart.paymentMethod || 'online',
+            paymentStatus: 'paid',
+            razorpayOrderId: razorpay_order_id,
+            razorpayPaymentId: razorpay_payment_id,
+            razorpaySignature: razorpay_signature,
+            orderStatus: 'placed',
+            statusHistory: [{
+                status: 'placed',
+                timestamp: new Date(),
+                notes: 'Order placed successfully after payment'
+            }],
+            orderDate: new Date(),
+            originalCartId: cart._id
+        });
+
+        await order.save();
 
         // Reduce product quantity in inventory
         if (cart.items && cart.items.length > 0) {
             for (const item of cart.items) {
                 await BikeProduct.findByIdAndUpdate(
-                    item.product,
+                    item.product._id,
                     { $inc: { quantityAvailable: -item.quantity } }
                 );
             }
         }
 
-        // Handle multi-currency for response
-        // cart.totalAmount is stored in INR in the database
-        const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
-        let displayAmount;
-        let currencySymbol;
+        // Delete the cart after successful order creation
+        await Cart.findByIdAndDelete(cartId);
 
+        // Handle multi-currency for response
+        let displayAmount;
         if (validCurrency) {
-            const convertedAmount = await getConvertedPrice(cart.totalAmount, currency);
-            displayAmount = convertedAmount;
-            currencySymbol = validCurrency.symbol;
+            displayAmount = await getConvertedPrice(order.totalAmount, currency);
         } else {
-            displayAmount = cart.totalAmount;
-            currencySymbol = '₹';
+            displayAmount = order.totalAmount;
         }
 
         res.status(200).json({
             success: true,
-            message: 'Payment verified successfully',
+            message: 'Payment verified and order created successfully',
             data: {
-                orderId: cart._id,
-                orderNumber: cart.orderNumber,
+                orderId: order._id,
+                orderNumber: order.orderNumber,
                 paymentId: razorpay_payment_id,
-                orderStatus: cart.orderStatus,
-                orderDate: cart.orderDate,
+                orderStatus: order.orderStatus,
+                orderDate: order.orderDate,
                 totalAmount: displayAmount,
                 displayCurrency: validCurrency ? currency : 'INR',
                 currencySymbol: currencySymbol
@@ -266,37 +299,77 @@ exports.handleWebhook = async (req, res) => {
     }
 };
 
-// Helper function to handle payment captured
+// Helper function to handle payment captured from webhook
 async function handlePaymentCaptured(paymentEntity) {
     try {
-        const orderId = paymentEntity.order_id;
+        const razorpayOrderId = paymentEntity.order_id;
 
         // Find cart by Razorpay order ID
-        const cart = await Cart.findOne({ razorpayOrderId: orderId });
+        const cart = await Cart.findOne({ razorpayOrderId: razorpayOrderId }).populate('items.product');
 
-        if (cart) {
-            cart.paymentStatus = 'paid';
-            cart.status = 'ordered';
-            cart.orderStatus = 'confirmed';
+        if (cart && cart.status !== 'checkout') {
+            // Generate order number
+            const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-            if (!cart.orderNumber) {
-                cart.orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-            }
+            // Prepare order items
+            const orderItems = cart.items.map(item => ({
+                product: item.product._id,
+                productName: item.product.name || 'Unknown Product',
+                productImage: item.product.images ? item.product.images[0] : null,
+                quantity: item.quantity,
+                price: item.price,
+                totalPrice: item.totalPrice
+            }));
 
-            cart.orderDate = new Date();
-            await cart.save();
+            // Create Order document
+            const order = new Order({
+                orderNumber: orderNumber,
+                phoneNumber: cart.phoneNumber,
+                emailId: cart.emailId,
+                items: orderItems,
+                shippingAddress: cart.shippingAddress,
+                billingAddress: cart.billingAddress,
+                shippingAddressSameAsBillingAddress: cart.shippingAddressSameAsBillingAddress,
+                subtotal: cart.subtotal,
+                shippingCost: cart.shippingCost,
+                taxAmount: cart.taxAmount,
+                discountAmount: cart.discountAmount,
+                couponCode: cart.couponCode,
+                totalAmount: cart.totalAmount,
+                currency: 'INR',
+                currencySymbol: '₹',
+                paymentMethod: cart.paymentMethod || 'online',
+                paymentStatus: 'paid',
+                razorpayOrderId: razorpayOrderId,
+                razorpayPaymentId: paymentEntity.id,
+                orderStatus: 'placed',
+                statusHistory: [{
+                    status: 'placed',
+                    timestamp: new Date(),
+                    notes: 'Order placed from webhook payment capture'
+                }],
+                orderDate: new Date(),
+                originalCartId: cart._id
+            });
+
+            await order.save();
 
             // Reduce product quantity in inventory
             if (cart.items && cart.items.length > 0) {
                 for (const item of cart.items) {
                     await BikeProduct.findByIdAndUpdate(
-                        item.product,
+                        item.product._id,
                         { $inc: { quantityAvailable: -item.quantity } }
                     );
                 }
             }
 
-            console.log('Payment captured for order:', cart.orderNumber);
+            // Delete the cart
+            await Cart.findByIdAndDelete(cart._id);
+
+            console.log('Order created from webhook:', order.orderNumber);
+        } else if (!cart) {
+            console.log('Cart not found for razorpay order:', razorpayOrderId);
         }
     } catch (error) {
         console.error('Error handling payment captured:', error);
@@ -328,7 +401,7 @@ exports.getPaymentStatus = async (req, res) => {
         const { cartId } = req.params;
         const { currency } = req.query;
 
-        const cart = await Cart.findById(cartId).select('paymentStatus razorpayOrderId razorpayPaymentId orderNumber orderStatus totalAmount');
+        const cart = await Cart.findById(cartId).select('paymentStatus razorpayOrderId razorpayPaymentId totalAmount');
 
         if (!cart) {
             return res.status(404).json({
@@ -338,7 +411,6 @@ exports.getPaymentStatus = async (req, res) => {
         }
 
         // Handle multi-currency for response
-        // cart.totalAmount is stored in INR in the database
         const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
         let displayAmount;
         let currencySymbol;
@@ -356,10 +428,8 @@ exports.getPaymentStatus = async (req, res) => {
             success: true,
             data: {
                 paymentStatus: cart.paymentStatus,
-                orderId: cart.razorpayOrderId,
+                razorpayOrderId: cart.razorpayOrderId,
                 paymentId: cart.razorpayPaymentId,
-                orderNumber: cart.orderNumber,
-                orderStatus: cart.orderStatus,
                 totalAmount: displayAmount,
                 displayCurrency: validCurrency ? currency : 'INR',
                 currencySymbol: currencySymbol

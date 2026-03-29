@@ -34,7 +34,7 @@ const addressSchema = new mongoose.Schema({
     }
 }, { _id: false });
 
-const cartItemSchema = new mongoose.Schema({
+const orderItemSchema = new mongoose.Schema({
     product: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'BikeProduct',
@@ -42,7 +42,7 @@ const cartItemSchema = new mongoose.Schema({
     },
     quantity: {
         type: Number,
-        default: 1
+        required: true
     },
     price: {
         type: Number,
@@ -54,7 +54,27 @@ const cartItemSchema = new mongoose.Schema({
     }
 }, { _id: false });
 
-const cartSchema = new mongoose.Schema({
+const orderStatusHistorySchema = new mongoose.Schema({
+    status: {
+        type: String,
+        enum: ['placed', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'],
+        required: true
+    },
+    timestamp: {
+        type: Date,
+        default: Date.now
+    },
+    notes: {
+        type: String
+    }
+}, { _id: false });
+
+const orderSchema = new mongoose.Schema({
+    orderNumber: {
+        type: String,
+        required: true,
+        unique: true
+    },
     phoneNumber: {
         type: String,
         required: true
@@ -63,7 +83,7 @@ const cartSchema = new mongoose.Schema({
         type: String,
         default: null
     },
-    items: [cartItemSchema],
+    items: [orderItemSchema],
     shippingAddress: addressSchema,
     billingAddress: addressSchema,
     shippingAddressSameAsBillingAddress: {
@@ -72,7 +92,7 @@ const cartSchema = new mongoose.Schema({
     },
     subtotal: {
         type: Number,
-        default: 0
+        required: true
     },
     shippingCost: {
         type: Number,
@@ -90,32 +110,63 @@ const cartSchema = new mongoose.Schema({
         type: String,
         default: null
     },
-    appliedCoupon: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Coupon',
-        default: null
-    },
     totalAmount: {
         type: Number,
-        default: 0
+        required: true
     },
-    // Payment-related fields (set before checkout)
-    razorpayOrderId: {
-        type: String
+    currency: {
+        type: String,
+        default: 'INR'
+    },
+    currencySymbol: {
+        type: String,
+        default: '₹'
     },
     paymentMethod: {
         type: String,
-        enum: ['card', 'upi', 'netbanking', 'cod', 'wallet', 'online']
+        enum: ['card', 'upi', 'netbanking', 'cod', 'wallet', 'online'],
+        required: true
     },
     paymentStatus: {
         type: String,
         enum: ['pending', 'paid', 'failed', 'refunded'],
         default: 'pending'
     },
-    status: {
+    razorpayOrderId: {
+        type: String
+    },
+    razorpayPaymentId: {
+        type: String
+    },
+    razorpaySignature: {
+        type: String
+    },
+    orderStatus: {
         type: String,
-        enum: ['active', 'validated', 'checkout'],
-        default: 'active'
+        enum: ['placed', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'],
+        default: 'placed'
+    },
+    statusHistory: [orderStatusHistorySchema],
+    orderDate: {
+        type: Date,
+        default: Date.now
+    },
+    estimatedDelivery: {
+        type: Date
+    },
+    deliveredDate: {
+        type: Date
+    },
+    trackingNumber: {
+        type: String
+    },
+    notes: {
+        type: String
+    },
+    // Original cart reference
+    originalCartId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Cart'
     },
     createdAt: {
         type: Date,
@@ -128,15 +179,14 @@ const cartSchema = new mongoose.Schema({
 });
 
 // Index for faster queries
-cartSchema.index({ phoneNumber: 1 });
-cartSchema.index({ status: 1 });
+orderSchema.index({ phoneNumber: 1 });
+orderSchema.index({ orderStatus: 1 });
+orderSchema.index({ orderDate: -1 });
 
-// Pre-save middleware to calculate totals
-cartSchema.pre('save', function(next) {
-    this.subtotal = this.items.reduce((total, item) => total + item.totalPrice, 0);
-    this.totalAmount = this.subtotal + this.shippingCost + this.taxAmount - this.discountAmount;
+// Pre-save middleware to update timestamp
+orderSchema.pre('save', function(next) {
     this.updatedAt = Date.now();
     next();
 });
 
-module.exports = mongoose.model('Cart', cartSchema);
+module.exports = mongoose.model('Order', orderSchema);

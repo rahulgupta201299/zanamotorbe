@@ -1,225 +1,73 @@
-const Cart = require('../models/Cart');
-const BikeProduct = require('../models/BikeProduct');
+const Order = require('../models/Order');
 const { getConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
 
-// Helper function to convert order prices based on currency
-const convertOrderPrices = async (order, currency) => {
-    if (!order || !order.items || order.items.length === 0) {
-        return order;
-    }
-
-    // Get INR info for default currency
-    const inrCurrency = currencyList.find(c => c.code === 'INR');
-
-    if (!currency || currency === 'INR') {
-        // For INR, still add currency info for consistency
-        const orderObj = order.toObject ? order.toObject() : order;
-        
-        const convertedItems = orderObj.items.map((item) => {
-            const itemObj = item.toObject ? item.toObject() : item;
-            let convertedProduct = itemObj.product;
-            
-            if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
-                const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
-                convertedProduct = {
-                    ...productObj,
-                    currency: 'INR',
-                    currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
-                };
-            }
-
-            return {
-                ...itemObj,
-                product: convertedProduct,
-                currency: 'INR',
-                currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
-            };
-        });
-
-        return {
-            ...orderObj,
-            items: convertedItems,
-            currency: 'INR',
-            currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
-        };
-    }
-
-    const validCurrency = currencyList.find(c => c.code === currency);
-    if (!validCurrency) {
-        // Return with INR info if currency is invalid
-        const orderObj = order.toObject ? order.toObject() : order;
-        
-        const convertedItems = orderObj.items.map((item) => {
-            const itemObj = item.toObject ? item.toObject() : item;
-            let convertedProduct = itemObj.product;
-            
-            if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
-                const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
-                convertedProduct = {
-                    ...productObj,
-                    currency: 'INR',
-                    currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
-                };
-            }
-
-            return {
-                ...itemObj,
-                product: convertedProduct,
-                currency: 'INR',
-                currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
-            };
-        });
-
-        return {
-            ...orderObj,
-            items: convertedItems,
-            currency: 'INR',
-            currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
-        };
-    }
-
-    const orderObj = order.toObject ? order.toObject() : order;
-
-    // Convert item prices
-    const convertedItems = await Promise.all(
-        orderObj.items.map(async (item) => {
-            const itemObj = item.toObject ? item.toObject() : item;
-            const originalPrice = itemObj.price || 0;
-            const originalTotalPrice = itemObj.totalPrice || 0;
-
-            const convertedPrice = await getConvertedPrice(originalPrice, currency);
-            const convertedTotalPrice = await getConvertedPrice(originalTotalPrice, currency);
-
-            // Convert product prices if product is populated
-            let convertedProduct = itemObj.product;
-            if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
-                const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
-                const productOriginalPrice = productObj.price || 0;
-                const productConvertedPrice = await getConvertedPrice(productOriginalPrice, currency);
-
-                convertedProduct = {
-                    ...productObj,
-                    price: productConvertedPrice,
-                    originalPrice: productOriginalPrice,
-                    currency: currency,
-                    currencySymbol: validCurrency.symbol
-                };
-            }
-
-            return {
-                ...itemObj,
-                product: convertedProduct,
-                price: convertedPrice,
-                totalPrice: convertedTotalPrice,
-                originalPrice: originalPrice,
-                originalTotalPrice: originalTotalPrice,
-                currency: currency,
-                currencySymbol: validCurrency.symbol
-            };
-        })
-    );
-
-    // Convert order totals
-    const convertedOrder = {
-        ...orderObj,
-        items: convertedItems,
-        subtotal: await getConvertedPrice(orderObj.subtotal || 0, currency),
-        originalSubtotal: orderObj.subtotal || 0,
-        discountAmount: await getConvertedPrice(orderObj.discountAmount || 0, currency),
-        originalDiscountAmount: orderObj.discountAmount || 0,
-        shippingCost: await getConvertedPrice(orderObj.shippingCost || 0, currency),
-        originalShippingCost: orderObj.shippingCost || 0,
-        taxAmount: await getConvertedPrice(orderObj.taxAmount || 0, currency),
-        originalTaxAmount: orderObj.taxAmount || 0,
-        totalAmount: await getConvertedPrice(orderObj.totalAmount || 0, currency),
-        originalTotalAmount: orderObj.totalAmount || 0,
-        currency: currency,
-        currencySymbol: validCurrency.symbol
-    };
-
-    return convertedOrder;
-};
-
-// Get orders for a specific user
-exports.getUserOrders = async (req, res) => {
+// Get orders by phone number
+exports.getOrdersByPhone = async (req, res) => {
     try {
         const { phoneNumber } = req.params;
-        const { page = 1, limit = 10, status } = req.query;
-        const { currency } = req.query;
+        const { currency, status, page = 1, limit = 10 } = req.query;
 
-        if (!phoneNumber) {
-            return res.status(400).json({
-                success: false,
-                message: 'Phone number is required'
-            });
-        }
-
-        // Build query
-        const query = {
-            phoneNumber,
-            status: 'ordered'
-        };
-
-        // Add status filter if provided
+        const query = { phoneNumber };
         if (status) {
             query.orderStatus = status;
         }
 
-        // Calculate pagination
-        const skip = (parseInt(page) - 1) * parseInt(limit);
-
-        // Get total count
-        const totalOrders = await Cart.countDocuments(query);
-
-        // Get orders with pagination
-        let orders = await Cart.find(query)
-            .populate('items.product')
+        const orders = await Order.find(query)
             .sort({ orderDate: -1 })
-            .skip(skip)
+            .populate('items.product')
+            .skip((page - 1) * limit)
             .limit(parseInt(limit));
 
-        // Convert prices based on currency
-        orders = await Promise.all(
-            orders.map(async (order) => {
-                return await convertOrderPrices(order, currency);
-            })
-        );
+        const total = await Order.countDocuments(query);
 
-        const totalPages = Math.ceil(totalOrders / parseInt(limit));
+        // Handle multi-currency conversion
+        const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
+        
+        const convertedOrders = await Promise.all(orders.map(async (order) => {
+            if (validCurrency) {
+                const convertedAmount = await getConvertedPrice(order.totalAmount, currency);
+                return {
+                    ...order.toObject(),
+                    totalAmount: convertedAmount,
+                    currency: currency,
+                    currencySymbol: validCurrency.symbol
+                };
+            }
+            return order;
+        }));
 
+        const currentPage = parseInt(page);
+        const totalPages = Math.ceil(total / limit);
+        
         res.status(200).json({
             success: true,
             data: {
-                orders,
+                orders: convertedOrders,
                 pagination: {
-                    currentPage: parseInt(page),
-                    totalPages,
-                    totalOrders,
-                    hasNextPage: parseInt(page) < totalPages,
-                    hasPrevPage: parseInt(page) > 1
+                    currentPage: currentPage,
+                    totalPages: totalPages,
+                    totalOrders: total,
+                    hasNextPage: currentPage < totalPages,
+                    hasPrevPage: currentPage > 1
                 }
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
     }
 };
 
-// Get order details by order ID
+// Get order by ID
 exports.getOrderById = async (req, res) => {
     try {
         const { orderId } = req.params;
         const { currency } = req.query;
 
-        if (!orderId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Order ID is required'
-            });
-        }
-
-        const order = await Cart.findById(orderId).populate('items.product');
+        const order = await Order.findById(orderId).populate('items.product');
 
         if (!order) {
             return res.status(404).json({
@@ -228,205 +76,37 @@ exports.getOrderById = async (req, res) => {
             });
         }
 
-        // Convert prices based on currency
-        const convertedOrder = await convertOrderPrices(order, currency);
+        // Handle multi-currency conversion
+        const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
+        let responseOrder = order.toObject();
+
+        if (validCurrency) {
+            responseOrder.totalAmount = await getConvertedPrice(order.totalAmount, currency);
+            responseOrder.subtotal = await getConvertedPrice(order.subtotal, currency);
+            responseOrder.shippingCost = await getConvertedPrice(order.shippingCost, currency);
+            responseOrder.taxAmount = await getConvertedPrice(order.taxAmount, currency);
+            responseOrder.discountAmount = await getConvertedPrice(order.discountAmount, currency);
+            responseOrder.currency = currency;
+            responseOrder.currencySymbol = validCurrency.symbol;
+
+            // Convert item prices
+            responseOrder.items = await Promise.all(order.items.map(async (item) => {
+                return {
+                    ...item.toObject(),
+                    price: await getConvertedPrice(item.price, currency),
+                    totalPrice: await getConvertedPrice(item.totalPrice, currency)
+                };
+            }));
+        }
 
         res.status(200).json({
             success: true,
-            data: convertedOrder
+            data: responseOrder
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
-
-// Get order by order number
-exports.getOrderByNumber = async (req, res) => {
-    try {
-        const { orderNumber } = req.params;
-        const { currency } = req.query;
-
-        if (!orderNumber) {
-            return res.status(400).json({
-                success: false,
-                message: 'Order number is required'
-            });
-        }
-
-        const order = await Cart.findOne({ orderNumber }).populate('items.product');
-
-        if (!order) {
-            return res.status(404).json({
-                success: false,
-                message: 'Order not found'
-            });
-        }
-
-        // Convert prices based on currency
-        const convertedOrder = await convertOrderPrices(order, currency);
-
-        res.status(200).json({
-            success: true,
-            data: convertedOrder
+        res.status(500).json({
+            success: false,
+            message: error.message
         });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
-
-// Update order status (Admin)
-exports.updateOrderStatus = async (req, res) => {
-    try {
-        const { orderId } = req.params;
-        const { orderStatus, trackingNumber, estimatedDelivery, notes } = req.body;
-
-        if (!orderId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Order ID is required'
-            });
-        }
-
-        if (!orderStatus) {
-            return res.status(400).json({
-                success: false,
-                message: 'Order status is required'
-            });
-        }
-
-        // Valid order statuses
-        const validStatuses = ['placed', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
-        if (!validStatuses.includes(orderStatus)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid order status'
-            });
-        }
-
-        const order = await Cart.findById(orderId);
-
-        if (!order) {
-            return res.status(404).json({
-                success: false,
-                message: 'Order not found'
-            });
-        }
-
-        // Check if order can be cancelled
-        if (orderStatus === 'cancelled' && ['delivered', 'cancelled', 'returned'].includes(order.orderStatus)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Order cannot be cancelled as it is already ' + order.orderStatus
-            });
-        }
-
-        // Update order fields
-        order.orderStatus = orderStatus;
-        
-        if (trackingNumber !== undefined) {
-            order.trackingNumber = trackingNumber;
-        }
-        
-        if (estimatedDelivery !== undefined) {
-            order.estimatedDelivery = estimatedDelivery;
-        }
-
-        if (notes !== undefined) {
-            // Append to existing notes or create new
-            if (order.notes) {
-                order.notes += `\n${new Date().toISOString()}: ${notes}`;
-            } else {
-                order.notes = notes;
-            }
-        }
-
-        // If order is cancelled and was paid, update payment status to refunded
-        if (orderStatus === 'cancelled' && order.paymentStatus === 'paid') {
-            order.paymentStatus = 'refunded';
-        }
-
-        await order.save();
-
-        res.status(200).json({
-            success: true,
-            message: 'Order status updated successfully',
-            data: {
-                _id: order._id,
-                orderNumber: order.orderNumber,
-                orderStatus: order.orderStatus,
-                trackingNumber: order.trackingNumber,
-                estimatedDelivery: order.estimatedDelivery,
-                notes: order.notes,
-                paymentStatus: order.paymentStatus,
-                updatedAt: order.updatedAt
-            }
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
-
-// Cancel order
-exports.cancelOrder = async (req, res) => {
-    try {
-        const { orderId } = req.params;
-        const { reason } = req.body;
-
-        if (!orderId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Order ID is required'
-            });
-        }
-
-        const order = await Cart.findById(orderId);
-
-        if (!order) {
-            return res.status(404).json({
-                success: false,
-                message: 'Order not found'
-            });
-        }
-
-        // Check if order can be cancelled
-        if (['delivered', 'cancelled', 'returned'].includes(order.orderStatus)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Order cannot be cancelled as it is already ' + order.orderStatus
-            });
-        }
-
-        // Update order status to cancelled
-        order.orderStatus = 'cancelled';
-
-        // If order was paid, update payment status to refunded
-        if (order.paymentStatus === 'paid') {
-            order.paymentStatus = 'refunded';
-        }
-
-        // Add cancellation reason to notes
-        const cancellationNote = `Cancelled: ${reason || 'No reason provided'}`;
-        if (order.notes) {
-            order.notes += `\n${new Date().toISOString()}: ${cancellationNote}`;
-        } else {
-            order.notes = cancellationNote;
-        }
-
-        await order.save();
-
-        res.status(200).json({
-            success: true,
-            message: 'Order cancelled successfully',
-            data: {
-                _id: order._id,
-                orderNumber: order.orderNumber,
-                orderStatus: order.orderStatus,
-                paymentStatus: order.paymentStatus,
-                notes: order.notes,
-                updatedAt: order.updatedAt
-            }
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
     }
 };
