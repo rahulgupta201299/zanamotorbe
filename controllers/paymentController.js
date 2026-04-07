@@ -52,7 +52,6 @@ exports.createOrder = async (req, res) => {
         }
 
         // Handle multi-currency - Razorpay only supports INR
-        // cart.totalAmount is stored in INR in the database
         const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
         let amountInPaisa;
         let displayAmount;
@@ -72,47 +71,111 @@ exports.createOrder = async (req, res) => {
             amountInPaisa = Math.round(cart.totalAmount * 100);
         }
 
-        const options = {
+        // Generate order number
+        const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+
+        // Prepare order items with product details
+        const orderItems = cart.items.map(item => ({
+            product: item.product._id,
+            productName: item.product.name || 'Unknown Product',
+            productImage: item.product.images ? item.product.images[0] : null,
+            quantity: item.quantity,
+            price: item.price,
+            totalPrice: item.totalPrice
+        }));
+
+        // Create Order document with pending status
+        const order = new Order({
+            orderNumber: orderNumber,
+            phoneNumber: cart.phoneNumber,
+            emailId: cart.emailId,
+            items: orderItems,
+            shippingAddress: cart.shippingAddress,
+            billingAddress: cart.billingAddress,
+            shippingAddressSameAsBillingAddress: cart.shippingAddressSameAsBillingAddress,
+            subtotal: cart.subtotal,
+            shippingCost: cart.shippingCost,
+            taxAmount: cart.taxAmount,
+            discountAmount: cart.discountAmount,
+            couponCode: cart.couponCode,
+            totalAmount: cart.totalAmount,
+            currency: validCurrency ? currency : 'INR',
+            currencySymbol: currencySymbol,
+            paymentMethod: 'online',
+            paymentStatus: 'pending',
+            orderStatus: 'pending',
+            statusHistory: [{
+                status: 'pending',
+                timestamp: new Date(),
+                notes: 'Order created, awaiting payment confirmation'
+            }],
+            orderDate: new Date(),
+            originalCartId: cart._id
+        });
+
+        await order.save();
+
+        // Create Razorpay order for payment
+        const razorpayOptions = {
             amount: amountInPaisa,
             currency: 'INR',
             receipt: `receipt_${cart._id}`,
             payment_capture: 1,
             notes: {
-                cartId: cart._id.toString(),
+                orderId: order._id.toString(),
+                orderNumber: orderNumber,
                 phoneNumber: phoneNumber,
                 originalCurrency: validCurrency ? currency : 'INR'
             }
         };
 
-        // Create Razorpay order
-        const razorpayOrder = await razorpay.orders.create(options);
+        let razorpayOrder;
+        try {
+            razorpayOrder = await razorpay.orders.create(razorpayOptions);
+        } catch (razorpayError) {
+            // Delete the order if Razorpay order creation fails
+            await Order.findByIdAndDelete(order._id);
+            console.error('Razorpay order creation failed:', razorpayError);
+            return res.status(500).json({
+                success: false,
+                error: 'Failed to create payment order. Please try again.'
+            });
+        }
 
-        // Update cart with order details
+        // Update order with Razorpay order ID
+        order.razorpayOrderId = razorpayOrder.id;
+        await order.save();
+
+        // Update cart with order reference
+        cart.orderId = order._id;
         cart.razorpayOrderId = razorpayOrder.id;
-        cart.paymentMethod = 'online';
+        cart.status = 'pending';
         cart.paymentStatus = 'pending';
-        cart.status = 'checkout';
         await cart.save();
 
         res.status(200).json({
             success: true,
             data: {
-                orderId: razorpayOrder.id,
+                orderId: order._id,
+                orderNumber: order.orderNumber,
+                razorpayOrderId: razorpayOrder.id,
                 amount: razorpayOrder.amount,
                 currency: razorpayOrder.currency,
                 displayAmount: displayAmount,
                 displayCurrency: validCurrency ? currency : 'INR',
                 currencySymbol: currencySymbol,
                 cartId: cart._id,
-                name: "zanaltd"
+                name: "zanaltd",
+                status: 'pending',
+                message: 'Order created successfully'
             }
         });
 
     } catch (error) {
-        console.error('Error creating Razorpay order:', error);
+        console.error('Error creating order:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to create payment order'
+            error: 'Failed to create order'
         });
     }
 };
@@ -124,11 +187,11 @@ exports.verifyPayment = async (req, res) => {
             razorpay_order_id,
             razorpay_payment_id,
             razorpay_signature,
-            cartId,
+            orderId,
             currency
         } = req.body;
 
-        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !cartId) {
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
             return res.status(400).json({
                 success: false,
                 error: 'Missing required payment verification parameters'
@@ -149,78 +212,30 @@ exports.verifyPayment = async (req, res) => {
             });
         }
 
-        // Find cart
-        const cart = await Cart.findById(cartId).populate('items.product');
-        if (!cart) {
+        // Find the existing order (created by createOrder)
+        const order = await Order.findById(orderId);
+        if (!order) {
             return res.status(404).json({
                 success: false,
-                error: 'Cart not found'
+                error: 'Order not found'
             });
         }
 
-        // Generate order number
-        const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+        // Update order with payment details
+        order.razorpayOrderId = razorpay_order_id;
+        order.razorpayPaymentId = razorpay_payment_id;
+        order.razorpaySignature = razorpay_signature;
+        order.orderStatus = 'processing';
+        order.statusHistory.push({
+            status: 'processing',
+            timestamp: new Date(),
+            notes: 'Payment verified, processing order'
+        });
+        await order.save();
 
         // Get currency info
         const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
         const currencySymbol = validCurrency ? validCurrency.symbol : '₹';
-
-        // Prepare order items with product details
-        const orderItems = cart.items.map(item => ({
-            product: item.product._id,
-            productName: item.product.name || 'Unknown Product',
-            productImage: item.product.images ? item.product.images[0] : null,
-            quantity: item.quantity,
-            price: item.price,
-            totalPrice: item.totalPrice
-        }));
-
-        // Create Order document
-        const order = new Order({
-            orderNumber: orderNumber,
-            phoneNumber: cart.phoneNumber,
-            emailId: cart.emailId,
-            items: orderItems,
-            shippingAddress: cart.shippingAddress,
-            billingAddress: cart.billingAddress,
-            shippingAddressSameAsBillingAddress: cart.shippingAddressSameAsBillingAddress,
-            subtotal: cart.subtotal,
-            shippingCost: cart.shippingCost,
-            taxAmount: cart.taxAmount,
-            discountAmount: cart.discountAmount,
-            couponCode: cart.couponCode,
-            totalAmount: cart.totalAmount,
-            currency: validCurrency ? currency : 'INR',
-            currencySymbol: currencySymbol,
-            paymentMethod: cart.paymentMethod || 'online',
-            paymentStatus: 'paid',
-            razorpayOrderId: razorpay_order_id,
-            razorpayPaymentId: razorpay_payment_id,
-            razorpaySignature: razorpay_signature,
-            orderStatus: 'placed',
-            statusHistory: [{
-                status: 'placed',
-                timestamp: new Date(),
-                notes: 'Order placed successfully after payment'
-            }],
-            orderDate: new Date(),
-            originalCartId: cart._id
-        });
-
-        await order.save();
-
-        // Reduce product quantity in inventory
-        if (cart.items && cart.items.length > 0) {
-            for (const item of cart.items) {
-                await BikeProduct.findByIdAndUpdate(
-                    item.product._id,
-                    { $inc: { quantityAvailable: -item.quantity } }
-                );
-            }
-        }
-
-        // Delete the cart after successful order creation
-        await Cart.findByIdAndDelete(cartId);
 
         // Handle multi-currency for response
         let displayAmount;
@@ -232,12 +247,12 @@ exports.verifyPayment = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Payment verified and order created successfully',
+            message: 'Payment verified successfully. Order is being processed',
             data: {
                 orderId: order._id,
                 orderNumber: order.orderNumber,
                 paymentId: razorpay_payment_id,
-                orderStatus: order.orderStatus,
+                orderStatus: 'processing',
                 orderDate: order.orderDate,
                 totalAmount: displayAmount,
                 displayCurrency: validCurrency ? currency : 'INR',
@@ -304,72 +319,38 @@ async function handlePaymentCaptured(paymentEntity) {
     try {
         const razorpayOrderId = paymentEntity.order_id;
 
-        // Find cart by Razorpay order ID
-        const cart = await Cart.findOne({ razorpayOrderId: razorpayOrderId }).populate('items.product');
+        // Find existing order by razorpayOrderId
+        const order = await Order.findOne({ razorpayOrderId: razorpayOrderId });
 
-        if (cart && cart.status !== 'checkout') {
-            // Generate order number
-            const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-
-            // Prepare order items
-            const orderItems = cart.items.map(item => ({
-                product: item.product._id,
-                productName: item.product.name || 'Unknown Product',
-                productImage: item.product.images ? item.product.images[0] : null,
-                quantity: item.quantity,
-                price: item.price,
-                totalPrice: item.totalPrice
-            }));
-
-            // Create Order document
-            const order = new Order({
-                orderNumber: orderNumber,
-                phoneNumber: cart.phoneNumber,
-                emailId: cart.emailId,
-                items: orderItems,
-                shippingAddress: cart.shippingAddress,
-                billingAddress: cart.billingAddress,
-                shippingAddressSameAsBillingAddress: cart.shippingAddressSameAsBillingAddress,
-                subtotal: cart.subtotal,
-                shippingCost: cart.shippingCost,
-                taxAmount: cart.taxAmount,
-                discountAmount: cart.discountAmount,
-                couponCode: cart.couponCode,
-                totalAmount: cart.totalAmount,
-                currency: 'INR',
-                currencySymbol: '₹',
-                paymentMethod: cart.paymentMethod || 'online',
-                paymentStatus: 'paid',
-                razorpayOrderId: razorpayOrderId,
-                razorpayPaymentId: paymentEntity.id,
-                orderStatus: 'placed',
-                statusHistory: [{
-                    status: 'placed',
-                    timestamp: new Date(),
-                    notes: 'Order placed from webhook payment capture'
-                }],
-                orderDate: new Date(),
-                originalCartId: cart._id
+        if (order) {
+            order.paymentStatus = 'paid';
+            order.orderStatus = 'placed';
+            order.razorpayPaymentId = paymentEntity.id;
+            order.statusHistory.push({
+                status: 'placed',
+                timestamp: new Date(),
+                notes: 'Payment confirmed via webhook'
             });
-
             await order.save();
 
             // Reduce product quantity in inventory
-            if (cart.items && cart.items.length > 0) {
-                for (const item of cart.items) {
+            if (order.items && order.items.length > 0) {
+                for (const item of order.items) {
                     await BikeProduct.findByIdAndUpdate(
-                        item.product._id,
+                        item.product,
                         { $inc: { quantityAvailable: -item.quantity } }
                     );
                 }
             }
 
             // Delete the cart
-            await Cart.findByIdAndDelete(cart._id);
+            if (order.originalCartId) {
+                await Cart.findByIdAndDelete(order.originalCartId);
+            }
 
-            console.log('Order created from webhook:', order.orderNumber);
-        } else if (!cart) {
-            console.log('Cart not found for razorpay order:', razorpayOrderId);
+            console.log('Order updated from webhook:', order.orderNumber);
+        } else {
+            console.log('Order not found for razorpay order:', razorpayOrderId);
         }
     } catch (error) {
         console.error('Error handling payment captured:', error);
@@ -379,16 +360,30 @@ async function handlePaymentCaptured(paymentEntity) {
 // Helper function to handle payment failed
 async function handlePaymentFailed(paymentEntity) {
     try {
-        const orderId = paymentEntity.order_id;
+        const razorpayOrderId = paymentEntity.order_id;
 
-        const cart = await Cart.findOne({ razorpayOrderId: orderId });
+        // Find existing order by razorpayOrderId
+        const order = await Order.findOne({ razorpayOrderId: razorpayOrderId });
 
-        if (cart) {
-            cart.paymentStatus = 'failed';
-            cart.status = 'active'; // Return to active cart
-            await cart.save();
+        if (order) {
+            order.paymentStatus = 'failed';
+            order.orderStatus = 'cancelled';
+            order.statusHistory.push({
+                status: 'cancelled',
+                timestamp: new Date(),
+                notes: 'Payment failed'
+            });
+            await order.save();
 
-            console.log('Payment failed for cart:', cart._id);
+            // Return cart to active status
+            if (order.originalCartId) {
+                await Cart.findByIdAndUpdate(order.originalCartId, {
+                    status: 'active',
+                    paymentStatus: 'failed'
+                });
+            }
+
+            console.log('Payment failed for order:', order.orderNumber);
         }
     } catch (error) {
         console.error('Error handling payment failed:', error);
@@ -398,42 +393,85 @@ async function handlePaymentFailed(paymentEntity) {
 // Get payment status
 exports.getPaymentStatus = async (req, res) => {
     try {
-        const { cartId } = req.params;
+        const { orderId, cartId } = req.params;
         const { currency } = req.query;
-
-        const cart = await Cart.findById(cartId).select('paymentStatus razorpayOrderId razorpayPaymentId totalAmount');
-
-        if (!cart) {
-            return res.status(404).json({
-                success: false,
-                error: 'Cart not found'
-            });
-        }
 
         // Handle multi-currency for response
         const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
-        let displayAmount;
-        let currencySymbol;
+        let currencySymbol = validCurrency ? validCurrency.symbol : '₹';
 
-        if (validCurrency && cart.totalAmount) {
-            const convertedAmount = await getConvertedPrice(cart.totalAmount, currency);
-            displayAmount = convertedAmount;
-            currencySymbol = validCurrency.symbol;
-        } else {
-            displayAmount = cart.totalAmount || 0;
-            currencySymbol = '₹';
+        // First try to find by orderId
+        if (orderId) {
+            const order = await Order.findById(orderId);
+            
+            if (!order) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Order not found'
+                });
+            }
+
+            // Handle multi-currency for response
+            let displayAmount;
+            if (validCurrency) {
+                displayAmount = await getConvertedPrice(order.totalAmount, currency);
+            } else {
+                displayAmount = order.totalAmount;
+            }
+
+            return res.status(200).json({
+                success: true,
+                data: {
+                    orderId: order._id,
+                    orderNumber: order.orderNumber,
+                    paymentStatus: order.paymentStatus,
+                    orderStatus: order.orderStatus,
+                    razorpayOrderId: order.razorpayOrderId,
+                    paymentId: order.razorpayPaymentId,
+                    totalAmount: displayAmount,
+                    displayCurrency: validCurrency ? currency : 'INR',
+                    currencySymbol: currencySymbol
+                }
+            });
         }
 
-        res.status(200).json({
-            success: true,
-            data: {
-                paymentStatus: cart.paymentStatus,
-                razorpayOrderId: cart.razorpayOrderId,
-                paymentId: cart.razorpayPaymentId,
-                totalAmount: displayAmount,
-                displayCurrency: validCurrency ? currency : 'INR',
-                currencySymbol: currencySymbol
+        // Fallback to cartId lookup
+        if (cartId) {
+            const cart = await Cart.findById(cartId).select('paymentStatus razorpayOrderId razorpayPaymentId totalAmount orderId');
+
+            if (!cart) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Cart not found'
+                });
             }
+
+            // Handle multi-currency for response
+            let displayAmount;
+            if (validCurrency && cart.totalAmount) {
+                displayAmount = await getConvertedPrice(cart.totalAmount, currency);
+            } else {
+                displayAmount = cart.totalAmount || 0;
+            }
+
+            return res.status(200).json({
+                success: true,
+                data: {
+                    orderId: cart.orderId,
+                    cartId: cart._id,
+                    paymentStatus: cart.paymentStatus,
+                    razorpayOrderId: cart.razorpayOrderId,
+                    paymentId: cart.razorpayPaymentId,
+                    totalAmount: displayAmount,
+                    displayCurrency: validCurrency ? currency : 'INR',
+                    currencySymbol: currencySymbol
+                }
+            });
+        }
+
+        return res.status(400).json({
+            success: false,
+            error: 'orderId or cartId is required'
         });
 
     } catch (error) {
