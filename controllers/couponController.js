@@ -5,7 +5,7 @@ const currencyList = require('../utils/currencyList');
 // Get all coupons (admin)
 exports.getAllCoupons = async (req, res) => {
     try {
-        const { page = 1, limit = 10, type, isActive, search } = req.query;
+        const { page = 1, limit = 10, type, isActive, search, currency } = req.query;
 
         const query = {};
 
@@ -19,12 +19,29 @@ exports.getAllCoupons = async (req, res) => {
             query.isActive = isActive === 'true';
         }
 
+        // Filter out expired coupons (expiresAt is set and less than current date)
+        query.$or = [
+            { expiresAt: null },
+            { expiresAt: { $gt: new Date() } }
+        ];
+
         // Search by code or description
         if (search) {
-            query.$or = [
-                { code: { $regex: search, $options: 'i' } },
-                { description: { $regex: search, $options: 'i' } }
+            query.$and = [
+                {
+                    $or: [
+                        { expiresAt: null },
+                        { expiresAt: { $gt: new Date() } }
+                    ]
+                },
+                {
+                    $or: [
+                        { code: { $regex: search, $options: 'i' } },
+                        { description: { $regex: search, $options: 'i' } }
+                    ]
+                }
             ];
+            delete query.$or;
         }
 
         const options = {
@@ -40,10 +57,31 @@ exports.getAllCoupons = async (req, res) => {
 
         const total = await Coupon.countDocuments(query);
 
+        // Currency handling
+        const validCurrency = currency ? currencyList.find(c => c.code === currency) : null;
+        const currencySymbol = validCurrency ? validCurrency.symbol : '₹';
+        const currencyCode = currency || 'INR';
+
+        // Convert coupon values if currency is provided
+        const convertedCoupons = await Promise.all(coupons.map(async (coupon) => {
+            const convertedDiscount = validCurrency ? await getConvertedPrice(coupon.discount, currency) : coupon.discount;
+            const convertedMaxDiscount = coupon.maxDiscount ? (validCurrency ? await getConvertedPrice(coupon.maxDiscount, currency) : coupon.maxDiscount) : null;
+            const convertedMinCartAmount = validCurrency ? await getConvertedPrice(coupon.minCartAmount, currency) : coupon.minCartAmount;
+
+            return {
+                ...coupon.toObject(),
+                discount: convertedDiscount,
+                maxDiscount: convertedMaxDiscount,
+                minCartAmount: convertedMinCartAmount,
+                currency: currencyCode,
+                currencySymbol: currencySymbol
+            };
+        }));
+
         res.status(200).json({
             success: true,
             data: {
-                coupons,
+                coupons: convertedCoupons,
                 pagination: {
                     page: options.page,
                     limit: options.limit,
