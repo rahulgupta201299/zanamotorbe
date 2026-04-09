@@ -125,7 +125,7 @@ exports.createCODOrder = async (req, res) => {
         }
 
         // Send confirmation email and SMS
-        sendCODNotifications(order);
+        sendOrderNotifications(order);
 
         res.status(200).json({
             success: true,
@@ -151,8 +151,8 @@ exports.createCODOrder = async (req, res) => {
     }
 };
 
-// Helper function to send COD order notifications
-const sendCODNotifications = (order) => {
+// Helper function to send order notifications (common for COD and online payments)
+const sendOrderNotifications = (order) => {
     const customerName = order.shippingAddress?.fullName || 'Customer';
     const customerEmail = order.emailId;
     const customerPhone = order.phoneNumber;
@@ -162,9 +162,9 @@ const sendCODNotifications = (order) => {
         sendOrderConfirmationEmail(order, customerEmail, customerName)
             .then(result => {
                 if (result.success) {
-                    console.log('COD confirmation email sent to:', customerEmail);
+                    console.log('Order confirmation email sent to:', customerEmail);
                 } else {
-                    console.log('Failed to send COD confirmation email:', result.error);
+                    console.log('Failed to send order confirmation email:', result.error);
                 }
             })
             .catch(err => console.log('Email sending error:', err));
@@ -175,9 +175,9 @@ const sendCODNotifications = (order) => {
         sendPaymentConfirmationSMS(order, customerPhone)
             .then(result => {
                 if (result.success) {
-                    console.log('COD confirmation SMS sent to:', customerPhone);
+                    console.log('Order confirmation SMS sent to:', customerPhone);
                 } else {
-                    console.log('Failed to send COD confirmation SMS:', result.error);
+                    console.log('Failed to send order confirmation SMS:', result.error);
                 }
             })
             .catch(err => console.log('SMS sending error:', err));
@@ -661,36 +661,8 @@ async function handlePaymentCaptured(paymentEntity) {
                 await Cart.findByIdAndDelete(order.originalCartId);
             }
 
-            // Send confirmation email and SMS
-            const customerName = order.shippingAddress?.fullName || 'Customer';
-            const customerEmail = order.emailId;
-            const phoneNumber = order.phoneNumber;
-
-            // Send email if customer has email
-            if (customerEmail) {
-                sendOrderConfirmationEmail(order, customerEmail, customerName)
-                    .then(result => {
-                        if (result.success) {
-                            console.log('Confirmation email sent to:', customerEmail);
-                        } else {
-                            console.log('Failed to send confirmation email:', result.error);
-                        }
-                    })
-                    .catch(err => console.log('Email sending error:', err));
-            }
-
-            // Send SMS notification
-            if (phoneNumber) {
-                sendPaymentConfirmationSMS(order, phoneNumber)
-                    .then(result => {
-                        if (result.success) {
-                            console.log('Confirmation SMS sent to:', phoneNumber);
-                        } else {
-                            console.log('Failed to send confirmation SMS:', result.error);
-                        }
-                    })
-                    .catch(err => console.log('SMS sending error:', err));
-            }
+            // Send confirmation email and SMS using common helper function
+            sendOrderNotifications(order);
 
             console.log('Order updated from webhook:', order.orderNumber);
         } else {
