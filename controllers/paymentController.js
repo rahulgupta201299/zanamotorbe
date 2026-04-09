@@ -444,6 +444,7 @@ exports.createOrder = async (req, res) => {
                 displayCurrency: validCurrency ? currency : 'INR',
                 currencySymbol: currencySymbol,
                 cartId: cart._id,
+                name: "zanaltd",
                 status: 'pending',
                 message: 'Order created successfully'
             }
