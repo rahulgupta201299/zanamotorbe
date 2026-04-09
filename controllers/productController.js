@@ -150,7 +150,7 @@ exports.getProductsByModel = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
+        const limit = parseInt(req.query.limit) || 100;
         const skip = (page - 1) * limit;
 
         const totalProducts = await BikeProduct.countDocuments({ model: req.params.modelId });
@@ -225,7 +225,7 @@ exports.getProductsByCategory = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
+        const limit = parseInt(req.query.limit) || 100;
         const skip = (page - 1) * limit;
 
         const totalProducts = await BikeProduct.countDocuments({ category: { $regex: new RegExp(req.params.category, 'i') } });
@@ -265,7 +265,7 @@ exports.getAllProductsPaginated = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
+        const limit = parseInt(req.query.limit) || 100;
         const skip = (page - 1) * limit;
 
         const totalProducts = await BikeProduct.countDocuments();
@@ -303,7 +303,7 @@ exports.getAllProductsPaginated = async (req, res) => {
 
 exports.searchProducts = async (req, res) => {
     try {
-        const { query, page = 1, limit = 10, currency } = req.query;
+        const { query, page = 1, limit = 100, currency } = req.query;
         if (!query) {
         return res.status(400).json({ success: false, message: 'Query parameter is required' });
         }

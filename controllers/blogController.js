@@ -14,7 +14,7 @@ exports.createBlog = async (req, res) => {
 exports.getAllBlogs = async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
+        const limit = parseInt(req.query.limit) || 100;
         const skip = (page - 1) * limit;
 
         // Get total count for pagination metadata
@@ -82,7 +82,7 @@ exports.deleteBlog = async (req, res) => {
 
 exports.recommendBlogsByTitle = async (req, res) => {
     try {
-        const { title, limit = 10 } = req.query;
+        const { title, limit = 100 } = req.query;
 
         if (!title) {
         return res.status(400).json({

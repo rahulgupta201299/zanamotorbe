@@ -6,7 +6,7 @@ const currencyList = require('../utils/currencyList');
 exports.getOrdersByPhone = async (req, res) => {
     try {
         const { phoneNumber } = req.params;
-        const { currency, status, page = 1, limit = 10 } = req.query;
+        const { currency, status, page = 1, limit = 100 } = req.query;
 
         const query = { phoneNumber };
         if (status) {

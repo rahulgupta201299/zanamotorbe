@@ -5,7 +5,7 @@ const currencyList = require('../utils/currencyList');
 // Get all coupons (admin)
 exports.getAllCoupons = async (req, res) => {
     try {
-        const { page = 1, limit = 10, type, isActive, search, currency } = req.query;
+        const { page = 1, limit = 100, type, isActive, search, currency } = req.query;
 
         const query = {};
 
