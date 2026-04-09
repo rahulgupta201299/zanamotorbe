@@ -551,7 +551,7 @@ exports.verifyPayment = async (req, res) => {
 // Handle Razorpay webhook
 exports.handleWebhook = async (req, res) => {
     try {
-        const secret = config.RAZORPAY_KEY_SECRET;
+        const secret = config.RAZORPAY_WEBHOOK_SECRET;
         const expectedSignature = crypto
             .createHmac('sha256', secret)
             .update(JSON.stringify(req.body))
