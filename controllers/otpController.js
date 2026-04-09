@@ -50,11 +50,6 @@ exports.generateOTP = async (req, res) => {
 
             // Initialize Twilio client
             const client = twilio(accountSid, authToken);
-            console.log({
-                body: `Your OTP is: ${otpCode}`,
-                from: `${twilioPhoneNumber}`,
-                to: `${isdCode}${phoneNumber}`
-            })
             // Send SMS with the OTP code
             const message = await client.messages.create({
                 body: `Your OTP is: ${otpCode}`,
@@ -75,7 +70,7 @@ exports.generateOTP = async (req, res) => {
 
         } catch (smsError) {
             console.log(smsError)
-            console.error('Error sending SMS:', smsError.message);
+            console.log('Error sending SMS:', smsError.message);
 
             // Clean up the OTP record if SMS sending failed
             await OTP.deleteOne({ _id: otpRecord._id });
@@ -87,7 +82,7 @@ exports.generateOTP = async (req, res) => {
         }
 
     } catch (error) {
-        console.error('Error in generateOTP:', error);
+        console.log('Error in generateOTP:', error);
         res.status(500).json({
             success: false,
             message: 'An error occurred while generating OTP'
@@ -170,7 +165,7 @@ exports.verifyOTP = async (req, res) => {
         }
 
     } catch (error) {
-        console.error('Error in verifyOTP:', error);
+        console.log('Error in verifyOTP:', error);
         res.status(500).json({
             success: false,
             message: 'An error occurred while verifying OTP'

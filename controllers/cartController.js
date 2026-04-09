@@ -381,7 +381,6 @@ exports.manageCartItem = async (req, res) => {
         let cart = await getOrCreateCart(phoneNumber);
         const unProcessedItems = [];
         const errors = [];
-        console.log(cart);
         // Process each item in the array to update cart
         for (let i = 0; i < items.length; i++) {
             const { productId, quantity } = items[i];

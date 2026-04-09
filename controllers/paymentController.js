@@ -6,6 +6,7 @@ const BikeProduct = require('../models/BikeProduct');
 const config = require('../config/config');
 const { getConvertedPrice, getReverseConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
+const { sendOrderConfirmationEmail, sendPaymentConfirmationSMS } = require('../utils/email');
 
 // Initialize Razorpay instance
 const razorpay = new Razorpay({
@@ -108,12 +109,23 @@ exports.createCODOrder = async (req, res) => {
 
         await order.save();
 
-        // Update cart with order reference
-        cart.orderId = order._id;
-        cart.status = 'pending';
-        cart.paymentStatus = 'pending';
-        cart.paymentMethod = 'cod';
-        await cart.save();
+        // Reduce product quantity in inventory immediately for COD orders
+        if (orderItems && orderItems.length > 0) {
+            for (const item of orderItems) {
+                await BikeProduct.findByIdAndUpdate(
+                    item.product,
+                    { $inc: { quantityAvailable: -item.quantity } }
+                );
+            }
+        }
+
+        // Delete the cart since COD order is confirmed immediately
+        if (cart._id) {
+            await Cart.findByIdAndDelete(cart._id);
+        }
+
+        // Send confirmation email and SMS
+        sendCODNotifications(order);
 
         res.status(200).json({
             success: true,
@@ -131,11 +143,44 @@ exports.createCODOrder = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error creating COD order:', error);
+        console.log('Error creating COD order:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to create COD order'
         });
+    }
+};
+
+// Helper function to send COD order notifications
+const sendCODNotifications = (order) => {
+    const customerName = order.shippingAddress?.fullName || 'Customer';
+    const customerEmail = order.emailId;
+    const customerPhone = order.phoneNumber;
+
+    // Send email if customer has email
+    if (customerEmail) {
+        sendOrderConfirmationEmail(order, customerEmail, customerName)
+            .then(result => {
+                if (result.success) {
+                    console.log('COD confirmation email sent to:', customerEmail);
+                } else {
+                    console.log('Failed to send COD confirmation email:', result.error);
+                }
+            })
+            .catch(err => console.log('Email sending error:', err));
+    }
+
+    // Send SMS notification
+    if (customerPhone) {
+        sendPaymentConfirmationSMS(order, customerPhone)
+            .then(result => {
+                if (result.success) {
+                    console.log('COD confirmation SMS sent to:', customerPhone);
+                } else {
+                    console.log('Failed to send COD confirmation SMS:', result.error);
+                }
+            })
+            .catch(err => console.log('SMS sending error:', err));
     }
 };
 
@@ -184,21 +229,6 @@ exports.confirmCODOrder = async (req, res) => {
         });
         await order.save();
 
-        // Reduce product quantity in inventory
-        if (order.items && order.items.length > 0) {
-            for (const item of order.items) {
-                await BikeProduct.findByIdAndUpdate(
-                    item.product,
-                    { $inc: { quantityAvailable: -item.quantity } }
-                );
-            }
-        }
-
-        // Delete the cart
-        if (order.originalCartId) {
-            await Cart.findByIdAndDelete(order.originalCartId);
-        }
-
         res.status(200).json({
             success: true,
             message: 'COD order confirmed successfully',
@@ -211,7 +241,7 @@ exports.confirmCODOrder = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error confirming COD order:', error);
+        console.log('Error confirming COD order:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to confirm COD order'
@@ -284,7 +314,7 @@ exports.cancelCODOrder = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error cancelling COD order:', error);
+        console.log('Error cancelling COD order:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to cancel COD order'
@@ -414,7 +444,7 @@ exports.createOrder = async (req, res) => {
         } catch (razorpayError) {
             // Delete the order if Razorpay order creation fails
             await Order.findByIdAndDelete(order._id);
-            console.error('Razorpay order creation failed:', razorpayError);
+            console.log('Razorpay order creation failed:', razorpayError);
             return res.status(500).json({
                 success: false,
                 error: 'Failed to create payment order. Please try again.'
@@ -451,7 +481,7 @@ exports.createOrder = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error creating order:', error);
+        console.log('Error creating order:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to create order'
@@ -544,7 +574,7 @@ exports.verifyPayment = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error verifying payment:', error);
+        console.log('Error verifying payment:', error);
         res.status(500).json({
             success: false,
             error: 'Payment verification failed'
@@ -589,7 +619,7 @@ exports.handleWebhook = async (req, res) => {
         res.status(200).json({ success: true });
 
     } catch (error) {
-        console.error('Webhook error:', error);
+        console.log('Webhook error:', error);
         res.status(500).json({
             success: false,
             error: 'Webhook processing failed'
@@ -631,12 +661,43 @@ async function handlePaymentCaptured(paymentEntity) {
                 await Cart.findByIdAndDelete(order.originalCartId);
             }
 
+            // Send confirmation email and SMS
+            const customerName = order.shippingAddress?.fullName || 'Customer';
+            const customerEmail = order.emailId;
+            const phoneNumber = order.phoneNumber;
+
+            // Send email if customer has email
+            if (customerEmail) {
+                sendOrderConfirmationEmail(order, customerEmail, customerName)
+                    .then(result => {
+                        if (result.success) {
+                            console.log('Confirmation email sent to:', customerEmail);
+                        } else {
+                            console.log('Failed to send confirmation email:', result.error);
+                        }
+                    })
+                    .catch(err => console.log('Email sending error:', err));
+            }
+
+            // Send SMS notification
+            if (phoneNumber) {
+                sendPaymentConfirmationSMS(order, phoneNumber)
+                    .then(result => {
+                        if (result.success) {
+                            console.log('Confirmation SMS sent to:', phoneNumber);
+                        } else {
+                            console.log('Failed to send confirmation SMS:', result.error);
+                        }
+                    })
+                    .catch(err => console.log('SMS sending error:', err));
+            }
+
             console.log('Order updated from webhook:', order.orderNumber);
         } else {
             console.log('Order not found for razorpay order:', razorpayOrderId);
         }
     } catch (error) {
-        console.error('Error handling payment captured:', error);
+        console.log('Error handling payment captured:', error);
     }
 }
 
@@ -669,7 +730,7 @@ async function handlePaymentFailed(paymentEntity) {
             console.log('Payment failed for order:', order.orderNumber);
         }
     } catch (error) {
-        console.error('Error handling payment failed:', error);
+        console.log('Error handling payment failed:', error);
     }
 }
 
@@ -758,7 +819,7 @@ exports.getPaymentStatus = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error getting payment status:', error);
+        console.log('Error getting payment status:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to get payment status'

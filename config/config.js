@@ -17,6 +17,15 @@ module.exports = {
     RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
     RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
 
+    // SMTP/Email Configuration
+    SMTP_HOST: process.env.SMTP_HOST,
+    SMTP_PORT: process.env.SMTP_PORT || 587,
+    SMTP_SECURE: process.env.SMTP_SECURE === 'true',
+    SMTP_USER: process.env.SMTP_USER,
+    SMTP_PASS: process.env.SMTP_PASS,
+    EMAIL_FROM: process.env.EMAIL_FROM,
+    EMAIL_FROM_NAME: process.env.EMAIL_FROM_NAME || 'Zana Motors',
+
     CROSS_CURRENCY_MULTIPLIER: process.env.CROSS_CURRENCY_MULTIPLIER,
 
     EXCHANGE_RATE_API_KEY: process.env.EXCHANGE_RATE_API_KEY

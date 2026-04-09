@@ -28,7 +28,7 @@ const fetchExchangeRates = async () => {
         }
         throw new Error('Invalid response from exchange rate API');
     } catch (error) {
-        console.error('Error fetching exchange rates:', error.message);
+        console.log('Error fetching exchange rates:', error.message);
         // Return default rates if API fails
         return {
             INR: 1,
