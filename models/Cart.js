@@ -114,7 +114,7 @@ const cartSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['active', 'validated', 'checkout'],
+        enum: ['active', 'pending', 'checkout'],
         default: 'active'
     },
     createdAt: {
