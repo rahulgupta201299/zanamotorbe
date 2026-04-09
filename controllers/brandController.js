@@ -39,10 +39,10 @@ exports.getAllBrands = async (req, res) => {
 
 exports.getBrandsWithModels = async (req, res) => {
     try {
-        const { category, page = 1, limit = 100 } = req.query;
+        const { category, page = 1, limit = 1000 } = req.query;
         
         const pageNum = parseInt(page) > 0 ? parseInt(page) : 1;
-        const limitNum = parseInt(limit) > 0 ? parseInt(limit) : 100;
+        const limitNum = parseInt(limit) > 0 ? parseInt(limit) : 1000;
         const skip = (pageNum - 1) * limitNum;
 
         // Get total count of brands with models
