@@ -504,12 +504,16 @@ exports.verifyPayment = async (req, res) => {
         order.razorpayOrderId = razorpay_order_id;
         order.razorpayPaymentId = razorpay_payment_id;
         order.razorpaySignature = razorpay_signature;
-        order.orderStatus = 'processing';
-        order.statusHistory.push({
-            status: 'processing',
-            timestamp: new Date(),
-            notes: 'Payment verified, processing order'
-        });
+        
+        // Only update orderStatus to processing if not already placed (webhook may have run first)
+        if (order.orderStatus !== 'placed' && order.orderStatus !== 'delivered') {
+            order.orderStatus = 'processing';
+            order.statusHistory.push({
+                status: 'processing',
+                timestamp: new Date(),
+                notes: 'Payment verified, processing order'
+            });
+        }
         await order.save();
 
         // Get currency info
@@ -531,7 +535,7 @@ exports.verifyPayment = async (req, res) => {
                 orderId: order._id,
                 orderNumber: order.orderNumber,
                 paymentId: razorpay_payment_id,
-                orderStatus: 'processing',
+                orderStatus: order.orderStatus,
                 orderDate: order.orderDate,
                 totalAmount: displayAmount,
                 displayCurrency: validCurrency ? currency : 'INR',
