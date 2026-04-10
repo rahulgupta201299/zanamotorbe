@@ -1,6 +1,8 @@
 const Order = require('../models/Order');
 const { getConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
+const { SHIPKLOUD_PUBLIC_KEY, SHIPKLOUD_PRIVATE_KEY, SHIPKLOUD_TRACK_ORDER_URL } = require('../config/config')
+const axios = require('axios');
 
 // Get orders by phone number
 exports.getOrdersByPhone = async (req, res) => {
@@ -97,6 +99,58 @@ exports.getOrderById = async (req, res) => {
                     totalPrice: await getConvertedPrice(item.totalPrice, currency)
                 };
             }));
+        }
+
+        res.status(200).json({
+            success: true,
+            data: responseOrder
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+exports.trackOrderByOrderId = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+
+        const order = await Order.findById(orderId);
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: 'Order not found'
+            });
+        }
+
+
+        const AWBNumber = order.logisticsAWBNumber;
+
+        if (AWBNumber) {
+            const response = await axios.get(
+              `${SHIPKLOUD_TRACK_ORDER_URL}?awb_number=${AWBNumber}`,
+              {
+                headers: {
+                  "public-key": SHIPKLOUD_PUBLIC_KEY,
+                  "private-key": SHIPKLOUD_PRIVATE_KEY,
+                  "Content-Type": "application/json",
+                },
+              },
+            );
+
+            // Validate successful response
+            if (response.data && response.data.result == "1" && response.data.data) {
+              const shipmentData = response.data.data;
+              const currentStatus = shipmentData.current_status ? shipmentData.current_status : null;
+              const expectedDeliveryDate = shipmentData.expected_delivery_date ? shipmentData.expected_delivery_date : null;
+              const orderStatus = shipmentData.order_status ? shipmentData.order_status : null;
+              responseOrder = { currentStatus, expectedDeliveryDate, orderStatus }
+            } else {
+              console.log(`Track Order Failed ${order.orderNumber}:`,response.data.message || "Unknown response format");
+            }
         }
 
         res.status(200).json({
