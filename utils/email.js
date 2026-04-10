@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const config = require('../config/config');
+const BikeProduct = require('../models/BikeProduct');
 
 // Create email transporter
 const transporter = nodemailer.createTransport({
@@ -24,6 +25,22 @@ const sendOrderConfirmationEmail = async (order, customerEmail, customerName) =>
         const shipFirstName = order.shippingAddress?.fullName?.split(' ')[0] || customerName || 'Customer';
         const shipLastName = order.shippingAddress?.fullName?.split(' ').slice(1).join(' ') || '';
 
+        // Enhance order items with product names from DB if missing
+        const augmentedItems = await Promise.all(order.items.map(async (item) => {
+            const itemObj = item.toObject ? item.toObject() : item;
+            if (!itemObj.productName && itemObj.product) {
+                try {
+                    const product = await BikeProduct.findById(itemObj.product).select('name');
+                    if (product) {
+                        itemObj.productName = product.name;
+                    }
+                } catch (err) {
+                    console.error('Error fetching product for email:', err);
+                }
+            }
+            return itemObj;
+        }));
+
         const mailOptions = {
             from: config.EMAIL_FROM,
             to: customerEmail,
@@ -42,7 +59,7 @@ const sendOrderConfirmationEmail = async (order, customerEmail, customerName) =>
                     <p><strong>Payment Method:</strong> ${order.paymentMethod === 'cod' ? 'Cash on Delivery' : 'Online Payment'}</p>
                     
                     <h4>Items Ordered:</h4>
-                    ${order.items.map(item => `
+                    ${augmentedItems.map(item => `
                         <div style="border-bottom: 1px solid #ddd; padding: 5px 0;">
                             <p style="margin: 0;"><strong>${item.productName || 'Product'}</strong></p>
                             <p style="margin: 2px 0; font-size: 12px;">Qty: ${item.quantity} × ${order.currencySymbol || '₹'}${item.price.toLocaleString('en-IN')}</p>
