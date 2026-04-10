@@ -44,6 +44,7 @@ const convertCartPrices = async (cart, currency) => {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 convertedProduct = {
                     ...productObj,
+                    originalPrice: productObj.price,
                     currency: 'INR',
                     currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
                 };
@@ -52,6 +53,8 @@ const convertCartPrices = async (cart, currency) => {
             return {
                 ...itemObj,
                 product: convertedProduct,
+                originalPrice: itemObj.price,
+                originalTotalPrice: itemObj.totalPrice,
                 currency: 'INR',
                 currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
             };
@@ -60,6 +63,11 @@ const convertCartPrices = async (cart, currency) => {
         return {
             ...cartObj,
             items: convertedItems,
+            originalSubtotal: cartObj.subtotal,
+            originalDiscountAmount: cartObj.discountAmount,
+            originalShippingCost: cartObj.shippingCost,
+            originalTaxAmount: cartObj.taxAmount,
+            originalTotalAmount: cartObj.totalAmount,
             currency: 'INR',
             currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
         };
@@ -103,8 +111,8 @@ const convertCartPrices = async (cart, currency) => {
     const convertedItems = await Promise.all(
         cart.items.map(async (item) => {
             const itemObj = item.toObject ? item.toObject() : item;
-            const originalPrice = itemObj.price || 0;
-            const originalTotalPrice = itemObj.totalPrice || 0;
+            const originalPrice = itemObj.price;
+            const originalTotalPrice = itemObj.totalPrice;
             
             const convertedPrice = await getConvertedPrice(originalPrice, currency);
             const convertedTotalPrice = await getConvertedPrice(originalTotalPrice, currency);
@@ -113,7 +121,7 @@ const convertCartPrices = async (cart, currency) => {
             let convertedProduct = itemObj.product;
             if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
-                const productOriginalPrice = productObj.price || 0;
+                const productOriginalPrice = productObj.price;
                 const productConvertedPrice = await getConvertedPrice(productOriginalPrice, currency);
                 
                 convertedProduct = {
@@ -142,16 +150,16 @@ const convertCartPrices = async (cart, currency) => {
     const convertedCart = {
         ...cart.toObject(),
         items: convertedItems,
-        subtotal: await getConvertedPrice(cart.subtotal || 0, currency),
-        originalSubtotal: cart.subtotal || 0,
-        discountAmount: await getConvertedPrice(cart.discountAmount || 0, currency),
-        originalDiscountAmount: cart.discountAmount || 0,
-        shippingCost: await getConvertedPrice(cart.shippingCost || 0, currency),
-        originalShippingCost: cart.shippingCost || 0,
-        taxAmount: await getConvertedPrice(cart.taxAmount || 0, currency),
-        originalTaxAmount: cart.taxAmount || 0,
-        totalAmount: await getConvertedPrice(cart.totalAmount || 0, currency),
-        originalTotalAmount: cart.totalAmount || 0,
+        subtotal: await getConvertedPrice(cart.subtotal, currency),
+        originalSubtotal: cart.subtotal,
+        discountAmount: await getConvertedPrice(cart.discountAmount, currency),
+        originalDiscountAmount: cart.discountAmount,
+        shippingCost: await getConvertedPrice(cart.shippingCost, currency),
+        originalShippingCost: cart.shippingCost,
+        taxAmount: await getConvertedPrice(cart.taxAmount, currency),
+        originalTaxAmount: cart.taxAmount,
+        totalAmount: await getConvertedPrice(cart.totalAmount, currency),
+        originalTotalAmount: cart.totalAmount,
         currency: currency,
         currencySymbol: validCurrency.symbol
     };
@@ -177,6 +185,7 @@ const convertValidationResults = async (results, currency) => {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 convertedProduct = {
                     ...productObj,
+                    originalPrice: productObj.price,
                     currency: 'INR',
                     currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
                 };
@@ -185,6 +194,7 @@ const convertValidationResults = async (results, currency) => {
             return {
                 ...result,
                 product: convertedProduct,
+                originalPrice: result.price,
                 currency: 'INR',
                 currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
             };
@@ -219,12 +229,12 @@ const convertValidationResults = async (results, currency) => {
 
     const convertedResults = await Promise.all(
         results.map(async (result) => {
-            const convertedPrice = await getConvertedPrice(result.price || 0, currency);
+            const convertedPrice = await getConvertedPrice(result.price, currency);
             let convertedProduct = result.product;
             
             if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
-                const productOriginalPrice = productObj.price || 0;
+                const productOriginalPrice = productObj.price;
                 const productConvertedPrice = await getConvertedPrice(productOriginalPrice, currency);
                 
                 convertedProduct = {
@@ -795,7 +805,7 @@ exports.applyCoupon = async (req, res) => {
         // Update cart with subtotal and recalculate totalAmount
         cart.subtotal = subtotal;
         cart.discountAmount = discountAmount;
-        cart.totalAmount = subtotal - discountAmount + (cart.shippingCost || 0) + (cart.taxAmount || 0);
+        cart.totalAmount = subtotal - discountAmount + (cart.shippingCost) + (cart.taxAmount);
 
         // Apply coupon to cart
         cart.appliedCoupon = coupon._id;
@@ -816,8 +826,8 @@ exports.applyCoupon = async (req, res) => {
             subtotal: shouldConvert ? await getConvertedPrice(updatedCart.subtotal, currency) : updatedCart.subtotal,
             discountAmount: shouldConvert ? await getConvertedPrice(updatedCart.discountAmount, currency) : updatedCart.discountAmount,
             totalAmount: shouldConvert ? await getConvertedPrice(updatedCart.totalAmount, currency) : updatedCart.totalAmount,
-            shippingCost: shouldConvert ? await getConvertedPrice(updatedCart.shippingCost || 0, currency) : (updatedCart.shippingCost || 0),
-            taxAmount: shouldConvert ? await getConvertedPrice(updatedCart.taxAmount || 0, currency) : (updatedCart.taxAmount || 0),
+            shippingCost: shouldConvert ? await getConvertedPrice(updatedCart.shippingCost, currency) : (updatedCart.shippingCost),
+            taxAmount: shouldConvert ? await getConvertedPrice(updatedCart.taxAmount, currency) : (updatedCart.taxAmount),
             currency: currency || 'INR',
             currencySymbol: validCurrency ? validCurrency.symbol : '₹'
         };
@@ -870,8 +880,8 @@ exports.removeCoupon = async (req, res) => {
         const validCurrency = currency ? currencyList.find(c => c.code === currency) : null;
         const convertedTotalAmount = validCurrency ? await getConvertedPrice(cart.totalAmount, currency) : cart.totalAmount;
         const convertedSubtotal = validCurrency ? await getConvertedPrice(cart.subtotal, currency) : cart.subtotal;
-        const convertedShippingCost = validCurrency ? await getConvertedPrice(cart.shippingCost || 0, currency) : cart.shippingCost;
-        const convertedTaxAmount = validCurrency ? await getConvertedPrice(cart.taxAmount || 0, currency) : cart.taxAmount;
+        const convertedShippingCost = validCurrency ? await getConvertedPrice(cart.shippingCost, currency) : cart.shippingCost;
+        const convertedTaxAmount = validCurrency ? await getConvertedPrice(cart.taxAmount, currency) : cart.taxAmount;
 
         res.status(200).json({
             success: true,

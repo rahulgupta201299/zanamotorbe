@@ -18,6 +18,7 @@ const convertProductPrices = async (products, currency) => {
             const productObj = product.toObject ? product.toObject() : product;
             return {
                 ...productObj,
+                originalPrice: productObj.price,
                 currency: 'INR',
                 currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
             };
