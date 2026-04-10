@@ -138,7 +138,6 @@ exports.createCODOrder = async (req, res) => {
                 currencySymbol: currencySymbol,
                 cartId: cart._id,
                 status: 'pending',
-                key: config.RAZORPAY_KEY_ID,
                 message: 'COD order created successfully. You will pay on delivery.'
             }
         });
@@ -474,6 +473,7 @@ exports.createOrder = async (req, res) => {
                 displayAmount: displayAmount,
                 displayCurrency: validCurrency ? currency : 'INR',
                 currencySymbol: currencySymbol,
+                key: config.RAZORPAY_KEY_ID,
                 cartId: cart._id,
                 name: "zanaltd",
                 status: 'pending',
