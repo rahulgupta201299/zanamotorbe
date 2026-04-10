@@ -2,12 +2,10 @@ const mongoose = require('mongoose');
 
 const profileSchema = new mongoose.Schema({
     firstName: {
-        type: String,
-        required: true
+        type: String
     },
     lastName: {
-        type: String,
-        required: true
+        type: String
     },
     isdCode: {
         type: String,
@@ -30,13 +28,11 @@ const profileSchema = new mongoose.Schema({
     bikeOwnedByCustomer: [{
         brand: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'BikeBrand',
-            required: true
+            ref: 'BikeBrand'
         },
         model: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'BikeModel',
-            required: true
+            ref: 'BikeModel'
         }
     }],
     createdAt: {
