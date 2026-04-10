@@ -157,8 +157,17 @@ const orderSchema = new mongoose.Schema({
     deliveredDate: {
         type: Date
     },
-    trackingNumber: {
-        type: String
+    logisticsOrderId: {
+        type: String,
+        default: null
+    },
+    logisticsReferenceId: {
+        type: String,
+        default: null
+    },
+    logisticsAWBNumber: {
+        type: String,
+        default: null
     },
     notes: {
         type: String
@@ -184,7 +193,7 @@ orderSchema.index({ orderStatus: 1 });
 orderSchema.index({ orderDate: -1 });
 
 // Pre-save middleware to update timestamp
-orderSchema.pre('save', function(next) {
+orderSchema.pre('save', function (next) {
     this.updatedAt = Date.now();
     next();
 });
