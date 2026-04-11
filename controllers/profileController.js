@@ -2,15 +2,15 @@ const Profile = require('../models/Profile');
 
 exports.createProfile = async (req, res) => {
     try {
-        const { firstName, lastName, isdCode, phoneNumber, emailId, address, notifyOffers, bikeOwnedByCustomer } = req.body;
+        const { firstName, lastName, isdCode, phoneNumber, emailId, addressLine1, addressLine2, city, state, country, postalCode, notifyOffers, bikeOwnedByCustomer } = req.body;
 
         // Check if profile with same isdCode and phoneNumber already exists
         const existingProfile = await Profile.findOne({ isdCode, phoneNumber });
         if (existingProfile) {
-        return res.status(400).json({ success: false, message: 'Profile with this ISD code and phone number already exists' });
+            return res.status(400).json({ success: false, message: 'Profile with this ISD code and phone number already exists' });
         }
 
-        const newProfile = new Profile({ firstName, lastName, isdCode, phoneNumber, emailId, address, notifyOffers, bikeOwnedByCustomer });
+        const newProfile = new Profile({ firstName, lastName, isdCode, phoneNumber, emailId, addressLine1, addressLine2, city, state, country, postalCode, notifyOffers, bikeOwnedByCustomer });
         await newProfile.save();
         res.status(201).json({ success: true, data: newProfile });
     } catch (error) {
@@ -30,10 +30,10 @@ exports.getProfileById = async (req, res) => {
 
 exports.updateProfile = async (req, res) => {
     try {
-        const { firstName, lastName, isdCode, phoneNumber, emailId, address, notifyOffers, bikeOwnedByCustomer } = req.body;
+        const { firstName, lastName, isdCode, phoneNumber, emailId, addressLine1, addressLine2, city, state, country, postalCode, notifyOffers, bikeOwnedByCustomer } = req.body;
         const profile = await Profile.findByIdAndUpdate(
             req.params.id,
-            { firstName, lastName, isdCode, phoneNumber, emailId, address, notifyOffers, bikeOwnedByCustomer },
+            { firstName, lastName, isdCode, phoneNumber, emailId, addressLine1, addressLine2, city, state, country, postalCode, notifyOffers, bikeOwnedByCustomer },
             { new: true }
         );
         if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
