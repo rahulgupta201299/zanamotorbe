@@ -380,8 +380,13 @@ exports.createOrder = async (req, res) => {
             amountInPaisa = Math.round(cart.totalAmount * 100);
         }
 
-        // Generate order number
-        const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+        // Check if an existing pending order already exists for this cart to prevent duplicates
+        let order = await Order.findOne({
+            originalCartId: cart._id,
+            orderStatus: 'pending'
+        });
+
+        const orderNumber = order ? order.orderNumber : `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
         // Prepare order items with product details
         const orderItems = cart.items.map(item => ({
@@ -393,36 +398,53 @@ exports.createOrder = async (req, res) => {
             totalPrice: item.totalPrice
         }));
 
-        // Create Order document with pending status
-        const order = new Order({
-            orderNumber: orderNumber,
-            phoneNumber: cart.phoneNumber,
-            emailId: cart.emailId,
-            items: orderItems,
-            shippingAddress: cart.shippingAddress,
-            billingAddress: cart.billingAddress,
-            shippingAddressSameAsBillingAddress: cart.shippingAddressSameAsBillingAddress,
-            subtotal: cart.subtotal,
-            shippingCost: cart.shippingCost,
-            taxAmount: cart.taxAmount,
-            discountAmount: cart.discountAmount,
-            couponCode: cart.couponCode,
-            totalAmount: cart.totalAmount,
-            currency: validCurrency ? currency : 'INR',
-            currencySymbol: currencySymbol,
-            paymentMethod: 'online',
-            paymentStatus: 'pending',
-            orderStatus: 'pending',
-            statusHistory: [{
-                status: 'pending',
-                timestamp: new Date(),
-                notes: 'Order created, awaiting payment confirmation'
-            }],
-            orderDate: new Date(),
-            originalCartId: cart._id
-        });
-
-        await order.save();
+        if (order) {
+            // Update existing order details
+            order.items = orderItems;
+            order.shippingAddress = cart.shippingAddress;
+            order.billingAddress = cart.billingAddress;
+            order.shippingAddressSameAsBillingAddress = cart.shippingAddressSameAsBillingAddress;
+            order.subtotal = cart.subtotal;
+            order.shippingCost = cart.shippingCost;
+            order.taxAmount = cart.taxAmount;
+            order.discountAmount = cart.discountAmount;
+            order.couponCode = cart.couponCode;
+            order.totalAmount = cart.totalAmount;
+            order.currency = validCurrency ? currency : 'INR';
+            order.currencySymbol = currencySymbol;
+            order.orderDate = new Date(); // Update date to reflect latest attempt
+            
+            // Note: razorpayOrderId might need to be recreated if amount changed
+        } else {
+            // Create New Order document
+            order = new Order({
+                orderNumber: orderNumber,
+                phoneNumber: cart.phoneNumber,
+                emailId: cart.emailId,
+                items: orderItems,
+                shippingAddress: cart.shippingAddress,
+                billingAddress: cart.billingAddress,
+                shippingAddressSameAsBillingAddress: cart.shippingAddressSameAsBillingAddress,
+                subtotal: cart.subtotal,
+                shippingCost: cart.shippingCost,
+                taxAmount: cart.taxAmount,
+                discountAmount: cart.discountAmount,
+                couponCode: cart.couponCode,
+                totalAmount: cart.totalAmount,
+                currency: validCurrency ? currency : 'INR',
+                currencySymbol: currencySymbol,
+                paymentMethod: 'online',
+                paymentStatus: 'pending',
+                orderStatus: 'pending',
+                statusHistory: [{
+                    status: 'pending',
+                    timestamp: new Date(),
+                    notes: 'Order created, awaiting payment confirmation'
+                }],
+                orderDate: new Date(),
+                originalCartId: cart._id
+            });
+        }
 
         // Create Razorpay order for payment
         const razorpayOptions = {
@@ -442,8 +464,6 @@ exports.createOrder = async (req, res) => {
         try {
             razorpayOrder = await razorpay.orders.create(razorpayOptions);
         } catch (razorpayError) {
-            // Delete the order if Razorpay order creation fails
-            await Order.findByIdAndDelete(order._id);
             console.log('Razorpay order creation failed:', razorpayError);
             return res.status(500).json({
                 success: false,
@@ -451,15 +471,15 @@ exports.createOrder = async (req, res) => {
             });
         }
 
-        // Update order with Razorpay order ID
+        // Update order with Razorpay order ID and save
         order.razorpayOrderId = razorpayOrder.id;
         await order.save();
 
-        // Update cart with order reference
+        // Update cart with order reference but KEEP it active
         cart.orderId = order._id;
         cart.razorpayOrderId = razorpayOrder.id;
-        cart.status = 'pending';
         cart.paymentStatus = 'pending';
+        // cart.status remains 'active' to allow user to return to cart
         await cart.save();
 
         res.status(200).json({
@@ -477,7 +497,7 @@ exports.createOrder = async (req, res) => {
                 cartId: cart._id,
                 name: "zanaltd",
                 status: 'pending',
-                message: 'Order created successfully'
+                message: order ? 'Order refreshed successfully' : 'Order created successfully'
             }
         });
 
