@@ -2,6 +2,7 @@ const twilio = require('twilio');
 const config = require('../config/config');
 const OTP = require('../models/OTP');
 const Profile = require('../models/Profile');
+const emailUtils = require('../utils/email');
 
 // Helper function to generate a 6-digit OTP code
 const generateOTPCode = () => {
@@ -169,6 +170,143 @@ exports.verifyOTP = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'An error occurred while verifying OTP'
+        });
+    }
+};
+// Generate and send OTP to user's email address
+exports.generateEmailOTP = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        // Validate required input parameters
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email is required'
+            });
+        }
+
+        // Generate a new 6-digit OTP code
+        const otpCode = generateOTPCode();
+
+        // Delete any existing unverified OTPs for this email to prevent duplicates
+        await OTP.deleteMany({ email });
+
+        // Create a new OTP record in the database
+        const otpRecord = await OTP.create({
+            email,
+            otp: otpCode
+        });
+
+        // Send OTP via email
+        const emailResult = await emailUtils.sendEmailOTP(email, otpCode);
+
+        if (emailResult.success) {
+            res.status(200).json({
+                success: true,
+                data: {
+                    message: `OTP sent successfully to ${email}`,
+                    email: email,
+                    expiresIn: '5 minutes'
+                }
+            });
+        } else {
+            // Clean up the OTP record if email sending failed
+            await OTP.deleteOne({ _id: otpRecord._id });
+
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to send OTP via email. Please check your configuration.'
+            });
+        }
+
+    } catch (error) {
+        console.log('Error in generateEmailOTP:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while generating email OTP'
+        });
+    }
+};
+
+// Verify email OTP entered by user
+exports.verifyEmailOTP = async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+
+        // Validate required input parameters
+        if (!email || !otp) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email and OTP are required'
+            });
+        }
+
+        // Find the most recent unverified OTP for this email
+        const otpRecord = await OTP.findOne({
+            email,
+            isVerified: false
+        }).sort({ createdAt: -1 });
+
+        // Check if any OTP record exists
+        if (!otpRecord) {
+            return res.status(400).json({
+                success: false,
+                message: 'No valid OTP found. OTP may have expired or was never sent. Please request a new OTP.'
+            });
+        }
+
+        // Check if OTP has expired
+        if (new Date() > otpRecord.expiresAt) {
+            return res.status(400).json({
+                success: false,
+                message: 'OTP has expired. Please request a new OTP.'
+            });
+        }
+
+        // Verify the OTP matches the stored code
+        if (otpRecord.otp !== otp) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid OTP. Please check and try again.'
+            });
+        }
+
+        // Mark OTP as verified to prevent reuse
+        otpRecord.isVerified = true;
+        await otpRecord.save();
+
+        // Check if user profile already exists for this email
+        const existingProfile = await Profile.findOne({ emailId: email });
+
+        // Return verification success with profile data if it exists
+        if (existingProfile) {
+            res.status(200).json({
+                success: true,
+                data: {
+                    message: 'Email OTP verified successfully',
+                    email: email,
+                    verified: true,
+                    profile: existingProfile
+                }
+            });
+        } else {
+            // Return verification success without profile data
+            res.status(200).json({
+                success: true,
+                data: {
+                    message: 'Email OTP verified successfully',
+                    email: email,
+                    verified: true
+                }
+            });
+        }
+
+    } catch (error) {
+        console.log('Error in verifyEmailOTP:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while verifying email OTP'
         });
     }
 };

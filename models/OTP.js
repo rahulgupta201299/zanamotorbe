@@ -3,13 +3,16 @@ const mongoose = require('mongoose');
 const otpSchema = new mongoose.Schema({
     phoneNumber: {
         type: String,
-        required: true,
         trim: true
     },
     isdCode: {
         type: String,
-        required: true,
         trim: true
+    },
+    email: {
+        type: String,
+        trim: true,
+        lowercase: true
     },
     otp: {
         type: String,
@@ -29,8 +32,9 @@ const otpSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Create compound index for efficient lookups
+// Create indexes for efficient lookups
 otpSchema.index({ isdCode: 1, phoneNumber: 1 });
+otpSchema.index({ email: 1 });
 
 const OTP = mongoose.model('OTP', otpSchema);
 

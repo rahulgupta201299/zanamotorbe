@@ -116,7 +116,53 @@ const sendPaymentConfirmationSMS = async (order, phoneNumber) => {
     }
 };
 
+/**
+ * Send OTP via email
+ * @param {string} email - Recipient email
+ * @param {string} otp - OTP code
+ */
+const sendEmailOTP = async (email, otp) => {
+    try {
+        const mailOptions = {
+            from: config.EMAIL_FROM,
+            to: email,
+            subject: 'Your Zana Motorcycles Verification Code',
+            html: `
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 10px; overflow: hidden;">
+                    <div style="background-color: #000; padding: 20px; text-align: center;">
+                        <h1 style="color: #fff; margin: 0; font-size: 24px; letter-spacing: 2px;">ZANA MOTORCYCLES</h1>
+                    </div>
+                    <div style="padding: 40px 30px; background-color: #ffffff;">
+                        <h2 style="color: #333; margin-top: 0; font-weight: 600;">Account Verification</h2>
+                        <p style="color: #666; font-size: 16px; line-height: 1.6;">Hello,</p>
+                        <p style="color: #666; font-size: 16px; line-height: 1.6;">To complete your verification process, please use the following One-Time Password (OTP):</p>
+                        
+                        <div style="background-color: #f9f9f9; border-radius: 8px; padding: 20px; text-align: center; margin: 30px 0; border: 1px dashed #ccc;">
+                            <span style="font-size: 36px; font-weight: 700; color: #000; letter-spacing: 10px; margin-left: 10px;">${otp}</span>
+                        </div>
+                        
+                        <p style="color: #666; font-size: 14px; line-height: 1.6;">This code is valid for <strong>5 minutes</strong>. For security reasons, please do not share this code with anyone.</p>
+                        <p style="color: #666; font-size: 14px; line-height: 1.6;">If you didn't request this code, you can safely ignore this email.</p>
+                    </div>
+                    <div style="background-color: #f4f4f4; padding: 20px; text-align: center; border-top: 1px solid #e0e0e0;">
+                        <p style="color: #999; font-size: 12px; margin: 0;">© ${new Date().getFullYear()} Zana Motorcycles. All rights reserved.</p>
+                        <p style="color: #999; font-size: 12px; margin: 5px 0 0;">Ride Safe, Ride Proud.</p>
+                    </div>
+                </div>
+            `
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log('OTP email sent:', info.messageId);
+        return { success: true, messageId: info.messageId };
+    } catch (error) {
+        console.log('Error sending OTP email:', error);
+        return { success: false, error: error.message };
+    }
+};
+
 module.exports = {
     sendOrderConfirmationEmail,
-    sendPaymentConfirmationSMS
+    sendPaymentConfirmationSMS,
+    sendEmailOTP
 };
