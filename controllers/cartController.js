@@ -67,6 +67,8 @@ const convertCartPrices = async (cart, currency) => {
             originalDiscountAmount: cartObj.discountAmount,
             originalShippingCost: cartObj.shippingCost,
             originalTaxAmount: cartObj.taxAmount,
+            codCharges: cartObj.codCharges || 0,
+            originalCodCharges: cartObj.codCharges || 0,
             originalTotalAmount: cartObj.totalAmount,
             currency: 'INR',
             currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
@@ -158,6 +160,8 @@ const convertCartPrices = async (cart, currency) => {
         originalShippingCost: cart.shippingCost,
         taxAmount: await getConvertedPrice(cart.taxAmount, currency),
         originalTaxAmount: cart.taxAmount,
+        codCharges: cart.codCharges ? await getConvertedPrice(cart.codCharges, currency) : 0,
+        originalCodCharges: cart.codCharges || 0,
         totalAmount: await getConvertedPrice(cart.totalAmount, currency),
         originalTotalAmount: cart.totalAmount,
         currency: currency,
@@ -579,6 +583,7 @@ exports.manageCartItem = async (req, res) => {
             shippingCost: convertedCart.shippingCost,
             taxAmount: convertedCart.taxAmount,
             discountAmount: convertedCart.discountAmount,
+            codCharges: convertedCart.codCharges,
             totalAmount: convertedCart.totalAmount,
             status: convertedCart.status,
             couponCode: convertedCart.couponCode,
@@ -828,6 +833,7 @@ exports.applyCoupon = async (req, res) => {
             totalAmount: shouldConvert ? await getConvertedPrice(updatedCart.totalAmount, currency) : updatedCart.totalAmount,
             shippingCost: shouldConvert ? await getConvertedPrice(updatedCart.shippingCost, currency) : (updatedCart.shippingCost),
             taxAmount: shouldConvert ? await getConvertedPrice(updatedCart.taxAmount, currency) : (updatedCart.taxAmount),
+            codCharges: shouldConvert ? await getConvertedPrice(updatedCart.codCharges || 0, currency) : (updatedCart.codCharges || 0),
             currency: currency || 'INR',
             currencySymbol: validCurrency ? validCurrency.symbol : '₹'
         };
@@ -892,6 +898,7 @@ exports.removeCoupon = async (req, res) => {
                 shippingCost: convertedShippingCost,
                 taxAmount: convertedTaxAmount,
                 discountAmount: 0,
+                codCharges: validCurrency ? await getConvertedPrice(cart.codCharges || 0, currency) : (cart.codCharges || 0),
                 currency: currency || 'INR',
                 currencySymbol: validCurrency ? validCurrency.symbol : '₹'
             }
@@ -901,3 +908,62 @@ exports.removeCoupon = async (req, res) => {
     }
 };
 
+// Set payment method and apply cod charges
+exports.setPaymentMethod = async (req, res) => {
+    try {
+        const { phoneNumber, method, currency } = req.body;
+
+        if (!phoneNumber || !method) {
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber and method are required'
+            });
+        }
+
+        const cart = await Cart.findOne({ phoneNumber, status: 'active' }).populate('items.product');
+        if (!cart) {
+            return res.status(404).json({
+                success: false,
+                message: 'Active cart not found'
+            });
+        }
+
+        if (method === 'cod') {
+            cart.codCharges = 300;
+        } else {
+            cart.codCharges = 0;
+        }
+
+        cart.paymentMethod = method;
+        await cart.save();
+
+        const convertedCart = await convertCartPrices(cart, currency);
+
+        let advanceAmount = 0;
+        if (cart.totalAmount < 1000) {
+            advanceAmount = 300;
+        } else if (cart.totalAmount >= 1000 && cart.totalAmount < 2000) {
+            advanceAmount = 600;
+        } else {
+            advanceAmount = 1000;
+        }
+
+        let finalAdvanceAmount = advanceAmount;
+        if (currency && currency !== 'INR') {
+            finalAdvanceAmount = await getConvertedPrice(advanceAmount, currency);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Payment method updated successfully',
+            data: {
+                ...convertedCart,
+                advanceAmount: finalAdvanceAmount,
+                originalAdvanceAmount: advanceAmount
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

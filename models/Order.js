@@ -106,6 +106,14 @@ const orderSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    codCharges: {
+        type: Number,
+        default: 0
+    },
+    advancePaid: {
+        type: Number,
+        default: 0
+    },
     couponCode: {
         type: String,
         default: null
@@ -129,7 +137,7 @@ const orderSchema = new mongoose.Schema({
     },
     paymentStatus: {
         type: String,
-        enum: ['pending', 'paid', 'failed', 'refunded'],
+        enum: ['pending', 'partial_paid', 'paid', 'failed', 'refunded'],
         default: 'pending'
     },
     razorpayOrderId: {
