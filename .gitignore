@@ -2,4 +2,8 @@ node_modules
 dummy_data.js
 *.md
 config.bat
+<<<<<<< HEAD
 .env
+=======
+.env
+>>>>>>> 8665cdf481663fe8d2ce8639c2e5771114e82ffb
