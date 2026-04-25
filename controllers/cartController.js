@@ -940,12 +940,14 @@ exports.setPaymentMethod = async (req, res) => {
         const convertedCart = await convertCartPrices(cart, currency);
 
         let advanceAmount = 0;
-        if (cart.totalAmount < 1000) {
-            advanceAmount = 300;
-        } else if (cart.totalAmount >= 1000 && cart.totalAmount < 2000) {
-            advanceAmount = 600;
-        } else {
-            advanceAmount = 1000;
+        if (method === 'cod') {
+            if (cart.totalAmount < 1000) {
+                advanceAmount = 300;
+            } else if (cart.totalAmount >= 1000 && cart.totalAmount < 2000) {
+                advanceAmount = 600;
+            } else {
+                advanceAmount = 1000;
+            }
         }
 
         let finalAdvanceAmount = advanceAmount;
