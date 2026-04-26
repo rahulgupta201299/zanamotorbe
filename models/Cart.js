@@ -86,6 +86,10 @@ const cartSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    codCharges: {
+        type: Number,
+        default: 0
+    },
     couponCode: {
         type: String,
         default: null
@@ -109,7 +113,7 @@ const cartSchema = new mongoose.Schema({
     },
     paymentStatus: {
         type: String,
-        enum: ['pending', 'paid', 'failed', 'refunded'],
+        enum: ['pending', 'partial_paid', 'paid', 'failed', 'refunded'],
         default: 'pending'
     },
     status: {
@@ -134,7 +138,7 @@ cartSchema.index({ status: 1 });
 // Pre-save middleware to calculate totals
 cartSchema.pre('save', function(next) {
     this.subtotal = this.items.reduce((total, item) => total + item.totalPrice, 0);
-    this.totalAmount = this.subtotal + this.shippingCost + this.taxAmount - this.discountAmount;
+    this.totalAmount = this.subtotal + this.shippingCost + this.taxAmount + (this.codCharges || 0) - this.discountAmount;
     this.updatedAt = Date.now();
     next();
 });

@@ -78,67 +78,128 @@ exports.createCODOrder = async (req, res) => {
             totalPrice: item.totalPrice
         }));
 
-        // Create Order document with COD status
-        const order = new Order({
-            orderNumber: orderNumber,
-            phoneNumber: cart.phoneNumber,
-            emailId: cart.emailId,
-            items: orderItems,
-            shippingAddress: cart.shippingAddress,
-            billingAddress: cart.billingAddress,
-            shippingAddressSameAsBillingAddress: cart.shippingAddressSameAsBillingAddress,
-            subtotal: cart.subtotal,
-            shippingCost: cart.shippingCost,
-            taxAmount: cart.taxAmount,
-            discountAmount: cart.discountAmount,
-            couponCode: cart.couponCode,
-            totalAmount: cart.totalAmount,
-            currency: 'INR',
-            currencySymbol: currencySymbol,
-            paymentMethod: 'cod',
-            paymentStatus: 'pending',
-            orderStatus: 'pending',
-            statusHistory: [{
-                status: 'pending',
-                timestamp: new Date(),
-                notes: 'COD order created, awaiting delivery'
-            }],
-            orderDate: new Date(),
-            originalCartId: cart._id
+        // Calculate advance payment
+        let advanceAmount = 0;
+        if (cart.totalAmount < 1000) {
+            advanceAmount = 300;
+        } else if (cart.totalAmount >= 1000 && cart.totalAmount < 2000) {
+            advanceAmount = 600;
+        } else {
+            advanceAmount = 1000;
+        }
+        const advanceAmountInPaisa = Math.round(advanceAmount * 100);
+
+        // Check if an existing pending order already exists for this cart
+        let order = await Order.findOne({
+            originalCartId: cart._id,
+            orderStatus: 'pending'
         });
 
+        const newOrderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+        const finalOrderNumber = order ? order.orderNumber : newOrderNumber;
+
+        if (order) {
+            order.items = orderItems;
+            order.shippingAddress = cart.shippingAddress;
+            order.billingAddress = cart.billingAddress;
+            order.shippingAddressSameAsBillingAddress = cart.shippingAddressSameAsBillingAddress;
+            order.subtotal = cart.subtotal;
+            order.shippingCost = cart.shippingCost;
+            order.taxAmount = cart.taxAmount;
+            order.discountAmount = cart.discountAmount;
+            order.codCharges = cart.codCharges || 300;
+            order.couponCode = cart.couponCode;
+            order.totalAmount = cart.totalAmount;
+            order.currency = 'INR';
+            order.currencySymbol = currencySymbol;
+            order.paymentMethod = 'cod';
+            order.advancePaid = advanceAmount;
+            order.orderDate = new Date();
+        } else {
+            order = new Order({
+                orderNumber: finalOrderNumber,
+                phoneNumber: cart.phoneNumber,
+                emailId: cart.emailId,
+                items: orderItems,
+                shippingAddress: cart.shippingAddress,
+                billingAddress: cart.billingAddress,
+                shippingAddressSameAsBillingAddress: cart.shippingAddressSameAsBillingAddress,
+                subtotal: cart.subtotal,
+                shippingCost: cart.shippingCost,
+                taxAmount: cart.taxAmount,
+                discountAmount: cart.discountAmount,
+                codCharges: cart.codCharges || 300,
+                couponCode: cart.couponCode,
+                totalAmount: cart.totalAmount,
+                currency: 'INR',
+                currencySymbol: currencySymbol,
+                paymentMethod: 'cod',
+                paymentStatus: 'pending',
+                orderStatus: 'pending',
+                advancePaid: advanceAmount,
+                statusHistory: [{
+                    status: 'pending',
+                    timestamp: new Date(),
+                    notes: 'COD order created, awaiting advance payment'
+                }],
+                orderDate: new Date(),
+                originalCartId: cart._id
+            });
+        }
+
+        // Create Razorpay order for advance payment
+        const razorpayOptions = {
+            amount: advanceAmountInPaisa,
+            currency: 'INR',
+            receipt: `receipt_${cart._id}`,
+            payment_capture: 1,
+            notes: {
+                orderId: order._id ? order._id.toString() : "",
+                orderNumber: finalOrderNumber,
+                phoneNumber: phoneNumber,
+                isCODAdvance: 'true'
+            }
+        };
+
+        let razorpayOrder;
+        try {
+            razorpayOrder = await razorpay.orders.create(razorpayOptions);
+        } catch (razorpayError) {
+            console.log('Razorpay order creation failed:', razorpayError);
+            return res.status(500).json({
+                success: false,
+                error: 'Failed to create payment order. Please try again.'
+            });
+        }
+
+        // Update order with Razorpay order ID and save
+        order.razorpayOrderId = razorpayOrder.id;
         await order.save();
 
-        // Reduce product quantity in inventory immediately for COD orders
-        if (orderItems && orderItems.length > 0) {
-            for (const item of orderItems) {
-                await BikeProduct.findByIdAndUpdate(
-                    item.product,
-                    { $inc: { quantityAvailable: -item.quantity } }
-                );
-            }
-        }
-
-        // Delete the cart since COD order is confirmed immediately
-        if (cart._id) {
-            await Cart.findByIdAndDelete(cart._id);
-        }
-
-        // Send confirmation email and SMS
-        sendOrderNotifications(order);
+        // Update cart with order reference but KEEP it active
+        cart.orderId = order._id;
+        cart.razorpayOrderId = razorpayOrder.id;
+        cart.paymentStatus = 'pending';
+        await cart.save();
 
         res.status(200).json({
             success: true,
             data: {
                 orderId: order._id,
                 orderNumber: order.orderNumber,
-                paymentMethod: 'cod',
-                displayAmount: displayAmount,
+                razorpayOrderId: razorpayOrder.id,
+                amount: razorpayOrder.amount, // advance in paisa
+                currency: razorpayOrder.currency,
+                displayAmount: advanceAmount, // advance
+                displayTotalAmount: displayAmount, // actual order total
                 displayCurrency: 'INR',
                 currencySymbol: currencySymbol,
+                key: config.RAZORPAY_KEY_ID,
                 cartId: cart._id,
+                name: "zanaltd",
+                paymentMethod: 'cod',
                 status: 'pending',
-                message: 'COD order created successfully. You will pay on delivery.'
+                message: 'Please complete the advance payment to place your COD order.'
             }
         });
 
@@ -360,6 +421,13 @@ exports.createOrder = async (req, res) => {
             });
         }
 
+        // If user switches to online checkout, remove cod charges if present
+        if (cart.codCharges > 0 || cart.paymentMethod === 'cod') {
+            cart.codCharges = 0;
+            cart.paymentMethod = 'online';
+            await cart.save();
+        }
+
         // Handle multi-currency - Razorpay only supports INR
         const validCurrency = currency && currency !== 'INR' ? currencyList.find(c => c.code === currency) : null;
         let amountInPaisa;
@@ -556,14 +624,26 @@ exports.verifyPayment = async (req, res) => {
         order.razorpayPaymentId = razorpay_payment_id;
         order.razorpaySignature = razorpay_signature;
         
-        // Only update orderStatus to processing if not already placed (webhook may have run first)
-        if (order.orderStatus !== 'placed' && order.orderStatus !== 'delivered') {
-            order.orderStatus = 'processing';
-            order.statusHistory.push({
-                status: 'processing',
-                timestamp: new Date(),
-                notes: 'Payment verified, processing order'
-            });
+        // Handle COD advance payment logic vs full online payment
+        if (order.paymentMethod === 'cod') {
+            order.paymentStatus = 'partial_paid';
+            if (order.orderStatus !== 'placed' && order.orderStatus !== 'delivered') {
+                order.orderStatus = 'placed';
+                order.statusHistory.push({
+                    status: 'placed',
+                    timestamp: new Date(),
+                    notes: 'Advance payment verified, COD order placed'
+                });
+            }
+        } else {
+            if (order.orderStatus !== 'placed' && order.orderStatus !== 'delivered') {
+                order.orderStatus = 'processing';
+                order.statusHistory.push({
+                    status: 'processing',
+                    timestamp: new Date(),
+                    notes: 'Payment verified, processing order'
+                });
+            }
         }
         await order.save();
 
@@ -657,14 +737,24 @@ async function handlePaymentCaptured(paymentEntity) {
         const order = await Order.findOne({ razorpayOrderId: razorpayOrderId });
 
         if (order) {
-            order.paymentStatus = 'paid';
+            if (order.paymentMethod === 'cod') {
+                order.paymentStatus = 'partial_paid';
+                order.statusHistory.push({
+                    status: 'placed',
+                    timestamp: new Date(),
+                    notes: 'Advance payment confirmed via webhook'
+                });
+            } else {
+                order.paymentStatus = 'paid';
+                order.statusHistory.push({
+                    status: 'placed',
+                    timestamp: new Date(),
+                    notes: 'Payment confirmed via webhook'
+                });
+            }
             order.orderStatus = 'placed';
             order.razorpayPaymentId = paymentEntity.id;
-            order.statusHistory.push({
-                status: 'placed',
-                timestamp: new Date(),
-                notes: 'Payment confirmed via webhook'
-            });
+
             await order.save();
 
             // Reduce product quantity in inventory
