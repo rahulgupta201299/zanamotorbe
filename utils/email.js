@@ -95,6 +95,13 @@ const sendOrderConfirmationEmail = async (order, customerEmail, customerName) =>
 const sendPaymentConfirmationSMS = async (order, phoneNumber) => {
     try {
         console.log('sendPaymentConfirmationSMS')
+
+        const isBypassMode = config.BYPASS_OTP;
+        if (isBypassMode) {
+            console.log('Payment confirmation SMS bypassed for testing environment.');
+            return { success: true, bypassed: true };
+        }
+
         const client = require('twilio')(
             config.TWILIO_ACCOUNT_SID,
             config.TWILIO_AUTH_TOKEN

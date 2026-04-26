@@ -1,6 +1,8 @@
 require('dotenv').config();
 
 module.exports = {
+    BYPASS_OTP: process.env.BYPASS_OTP === 'true',
+
     // Server Configuration
     PORT: process.env.PORT || 3000,
 
@@ -39,5 +41,5 @@ module.exports = {
 
     // COD Charges
     COD_CHARGES: parseInt(process.env.COD_CHARGES, 10) || 300
-    
+
 };

@@ -16,14 +16,16 @@ exports.generateOTP = async (req, res) => {
 
         // Validate required input parameters
         if (!isdCode || !phoneNumber) {
-        return res.status(400).json({
-            success: false,
-            message: 'ISD code and phone number are required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'ISD code and phone number are required'
+            });
         }
 
+        const isBypassMode = config.BYPASS_OTP;
+
         // Generate a new 6-digit OTP code
-        const otpCode = generateOTPCode();
+        const otpCode = isBypassMode ? '123456' : generateOTPCode();
 
         // Delete any existing unverified OTPs for this phone number to prevent duplicates
         await OTP.deleteMany({ isdCode, phoneNumber });
@@ -36,6 +38,17 @@ exports.generateOTP = async (req, res) => {
         });
 
         try {
+            if (isBypassMode) {
+                return res.status(200).json({
+                    success: true,
+                    data: {
+                        message: `OTP sent successfully to ${isdCode}-${phoneNumber} (Bypassed)`,
+                        phoneNumber: `${isdCode}-${phoneNumber}`,
+                        expiresIn: '5 minutes'
+                    }
+                });
+            }
+
             const accountSid = config.TWILIO_ACCOUNT_SID;
             const authToken = config.TWILIO_AUTH_TOKEN;
             const twilioPhoneNumber = config.TWILIO_PHONE_NUMBER;
@@ -57,7 +70,6 @@ exports.generateOTP = async (req, res) => {
                 from: twilioPhoneNumber,
                 to: `${isdCode}${phoneNumber}`
             });
-            console.log(`message: ${message}`)
 
             // Return success response
             res.status(200).json({
@@ -98,10 +110,10 @@ exports.verifyOTP = async (req, res) => {
 
         // Validate required input parameters
         if (!isdCode || !phoneNumber || !otp) {
-        return res.status(400).json({
-            success: false,
-            message: 'ISD code, phone number, and OTP are required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'ISD code, phone number, and OTP are required'
+            });
         }
 
         // Find the most recent unverified OTP for this phone number
@@ -111,33 +123,40 @@ exports.verifyOTP = async (req, res) => {
             isVerified: false
         }).sort({ createdAt: -1 });
 
-        // Check if any OTP record exists
-        if (!otpRecord) {
-            return res.status(400).json({
-                success: false,
-                message: 'No valid OTP found. OTP may have expired or was never sent. Please request a new OTP.'
-            });
-        }
+        const isBypassMode = config.BYPASS_OTP;
+        const isBypassValid = isBypassMode && (otp === '123456');
 
-        // Check if OTP has expired
-        if (new Date() > otpRecord.expiresAt) {
-            return res.status(400).json({
-                success: false,
-                message: 'OTP has expired. Please request a new OTP.'
-            });
-        }
+        if (!isBypassValid) {
+            // Check if any OTP record exists
+            if (!otpRecord) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No valid OTP found. OTP may have expired or was never sent. Please request a new OTP.'
+                });
+            }
 
-        // Verify the OTP matches the stored code
-        if (otpRecord.otp !== otp) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid OTP. Please check and try again.'
-            });
+            // Check if OTP has expired
+            if (new Date() > otpRecord.expiresAt) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'OTP has expired. Please request a new OTP.'
+                });
+            }
+
+            // Verify the OTP matches the stored code
+            if (otpRecord.otp !== otp) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid OTP. Please check and try again.'
+                });
+            }
         }
 
         // Mark OTP as verified to prevent reuse
-        otpRecord.isVerified = true;
-        await otpRecord.save();
+        if (otpRecord) {
+            otpRecord.isVerified = true;
+            await otpRecord.save();
+        }
 
         // Check if user profile already exists for this phone number
         const existingProfile = await Profile.findOne({ isdCode, phoneNumber });
@@ -186,8 +205,10 @@ exports.generateEmailOTP = async (req, res) => {
             });
         }
 
+        const isBypassMode = config.BYPASS_OTP;
+
         // Generate a new 6-digit OTP code
-        const otpCode = generateOTPCode();
+        const otpCode = isBypassMode ? '123456' : generateOTPCode();
 
         // Delete any existing unverified OTPs for this email to prevent duplicates
         await OTP.deleteMany({ email });
@@ -199,13 +220,16 @@ exports.generateEmailOTP = async (req, res) => {
         });
 
         // Send OTP via email
-        const emailResult = await emailUtils.sendEmailOTP(email, otpCode);
+        let emailResult = { success: true };
+        if (!isBypassMode) {
+            emailResult = await emailUtils.sendEmailOTP(email, otpCode);
+        }
 
         if (emailResult.success) {
             res.status(200).json({
                 success: true,
                 data: {
-                    message: `OTP sent successfully to ${email}`,
+                    message: `OTP sent successfully to ${email}${isBypassMode ? ' (Bypassed)' : ''}`,
                     email: email,
                     expiresIn: '5 minutes'
                 }
@@ -248,33 +272,40 @@ exports.verifyEmailOTP = async (req, res) => {
             isVerified: false
         }).sort({ createdAt: -1 });
 
-        // Check if any OTP record exists
-        if (!otpRecord) {
-            return res.status(400).json({
-                success: false,
-                message: 'No valid OTP found. OTP may have expired or was never sent. Please request a new OTP.'
-            });
-        }
+        const isBypassMode = config.BYPASS_OTP;
+        const isBypassValid = isBypassMode && (otp === '123456');
 
-        // Check if OTP has expired
-        if (new Date() > otpRecord.expiresAt) {
-            return res.status(400).json({
-                success: false,
-                message: 'OTP has expired. Please request a new OTP.'
-            });
-        }
+        if (!isBypassValid) {
+            // Check if any OTP record exists
+            if (!otpRecord) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No valid OTP found. OTP may have expired or was never sent. Please request a new OTP.'
+                });
+            }
 
-        // Verify the OTP matches the stored code
-        if (otpRecord.otp !== otp) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid OTP. Please check and try again.'
-            });
+            // Check if OTP has expired
+            if (new Date() > otpRecord.expiresAt) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'OTP has expired. Please request a new OTP.'
+                });
+            }
+
+            // Verify the OTP matches the stored code
+            if (otpRecord.otp !== otp) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid OTP. Please check and try again.'
+                });
+            }
         }
 
         // Mark OTP as verified to prevent reuse
-        otpRecord.isVerified = true;
-        await otpRecord.save();
+        if (otpRecord) {
+            otpRecord.isVerified = true;
+            await otpRecord.save();
+        }
 
         // Check if user profile already exists for this email
         const existingProfile = await Profile.findOne({ emailId: email });
