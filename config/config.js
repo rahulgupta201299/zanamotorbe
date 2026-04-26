@@ -36,5 +36,8 @@ module.exports = {
     SHIPKLOUD_PUBLIC_KEY: process.env.SHIPKLOUD_PUBLIC_KEY,
     SHIPKLOUD_PRIVATE_KEY: process.env.SHIPKLOUD_PRIVATE_KEY,
     SHIPKLOUD_TRACK_ORDER_URL: process.env.SHIPKLOUD_TRACK_ORDER_URL,
+
+    // COD Charges
+    COD_CHARGES: parseInt(process.env.COD_CHARGES, 10) || 300
     
 };

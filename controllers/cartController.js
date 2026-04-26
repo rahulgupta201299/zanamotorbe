@@ -3,6 +3,7 @@ const BikeProduct = require('../models/BikeProduct');
 const Coupon = require('../models/Coupon');
 const { getConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
+const { COD_CHARGES } = require('../config/config')
 
 // Helper function to get or create cart
 const getOrCreateCart = async (phoneNumber) => {
@@ -929,7 +930,7 @@ exports.setPaymentMethod = async (req, res) => {
         }
 
         if (method === 'cod') {
-            cart.codCharges = 300;
+            cart.codCharges = COD_CHARGES;
         } else {
             cart.codCharges = 0;
         }
