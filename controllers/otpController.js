@@ -159,7 +159,13 @@ exports.verifyOTP = async (req, res) => {
         }
 
         // Check if user profile already exists for this phone number
-        const existingProfile = await Profile.findOne({ isdCode, phoneNumber: `${isdCode}-${phoneNumber}` });
+        const existingProfile = await Profile.findOne({
+            isdCode,
+            $or: [
+                { phoneNumber: `${isdCode}-${phoneNumber}` },
+                { phoneNumber: phoneNumber }
+            ]
+        });
 
         // Return verification success with profile data if it exists
         if (existingProfile) {
