@@ -4,5 +4,6 @@ const countryController = require('../controllers/countryController');
 
 router.get('/isd-codes', countryController.getIsdCodes);
 router.get('/currencies', countryController.getCurrencies);
+router.get('/geolocation', countryController.getCountryFromCoords);
 
 module.exports = router;
