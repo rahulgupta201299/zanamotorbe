@@ -118,7 +118,7 @@ const convertSingleProductPrice = async (product, currency) => {
 
 exports.createProduct = async (req, res) => {
     try {
-        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
+        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, isComingSoon, shortDescription, longDescription, description, category, subCategory, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn, isActive, priority } = req.body;
         const autoBikeSpecific = model ? (isBikeSpecific !== undefined ? isBikeSpecific : true) : false;
 
         const newProduct = new BikeProduct({
@@ -129,17 +129,21 @@ exports.createProduct = async (req, res) => {
             productCode,
             isNewArrival,
             isGarageFavorite,
+            isComingSoon,
             shortDescription,
             longDescription,
             description,
             category,
+            subCategory,
             categoryIcon,
             price,
             imageUrl,
             images,
             quantityAvailable,
             specifications,
-            shippingAndReturn
+            shippingAndReturn,
+            isActive,
+            priority
         });
         await newProduct.save();
         res.status(201).json({ success: true, data: newProduct });
@@ -155,12 +159,13 @@ exports.getProductsByModel = async (req, res) => {
         const limit = parseInt(req.query.limit) || 1000;
         const skip = (page - 1) * limit;
 
-        const totalProducts = await BikeProduct.countDocuments({ model: req.params.modelId });
+        const query = { model: req.params.modelId, isActive: true };
+        const totalProducts = await BikeProduct.countDocuments(query);
 
-        const products = await BikeProduct.find({ model: req.params.modelId })
+        const products = await BikeProduct.find(query)
             .skip(skip)
             .limit(limit)
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -191,7 +196,7 @@ exports.getProductsByModel = async (req, res) => {
 exports.getProductById = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
-        const product = await BikeProduct.findById(req.params.id);
+        const product = await BikeProduct.findOne({ _id: req.params.id, isActive: true });
         if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
         
         const productsWithWishlist = await addIsWishlistToProducts([product], phoneNumber);
@@ -205,15 +210,26 @@ exports.getProductById = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
     try {
-        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
+        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, isComingSoon, shortDescription, longDescription, description, category, subCategory, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn, isActive, priority } = req.body;
 
         const autoBikeSpecific = model ?
             (isBikeSpecific !== undefined ? isBikeSpecific : true) :
             false;
 
+        const updateFields = { 
+            brand, model, isBikeSpecific: autoBikeSpecific, name, productCode, 
+            isNewArrival, isGarageFavorite, isComingSoon, shortDescription, 
+            longDescription, description, category, subCategory, categoryIcon, 
+            price, imageUrl, images, quantityAvailable, specifications, 
+            shippingAndReturn, isActive, priority 
+        };
+
+        // Remove undefined fields
+        Object.keys(updateFields).forEach(key => updateFields[key] === undefined && delete updateFields[key]);
+
         const product = await BikeProduct.findByIdAndUpdate(
             req.params.id,
-            { brand, model, isBikeSpecific: autoBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn },
+            updateFields,
             { new: true }
         );
         if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
@@ -230,12 +246,17 @@ exports.getProductsByCategory = async (req, res) => {
         const limit = parseInt(req.query.limit) || 1000;
         const skip = (page - 1) * limit;
 
-        const totalProducts = await BikeProduct.countDocuments({ category: { $regex: new RegExp(req.params.category, 'i') } });
+        const query = { 
+            category: { $regex: new RegExp(req.params.category, 'i') },
+            isActive: true 
+        };
 
-        const products = await BikeProduct.find({ category: { $regex: new RegExp(req.params.category, 'i') } })
+        const totalProducts = await BikeProduct.countDocuments(query);
+
+        const products = await BikeProduct.find(query)
             .skip(skip)
             .limit(limit)
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -270,12 +291,12 @@ exports.getAllProductsPaginated = async (req, res) => {
         const limit = parseInt(req.query.limit) || 1000;
         const skip = (page - 1) * limit;
 
-        const totalProducts = await BikeProduct.countDocuments();
+        const totalProducts = await BikeProduct.countDocuments({ isActive: true });
 
-        const products = await BikeProduct.find()
+        const products = await BikeProduct.find({ isActive: true })
             .skip(skip)
             .limit(limit)
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -318,28 +339,29 @@ exports.searchProducts = async (req, res) => {
         const escapedQuery = decodedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, ' ').trim();
         const caseInsensitiveRegex = { $regex: escapedQuery, $options: 'i' };
 
-        const matchingModels = await BikeModel.find({ name: caseInsensitiveRegex }).select('_id');
+        const matchingModels = await BikeModel.find({ name: caseInsensitiveRegex, isActive: true }).select('_id');
         const modelIds = matchingModels.map(m => m._id);
 
-        const totalCount = await BikeProduct.countDocuments({
-            $or: [
-                { name: caseInsensitiveRegex },
-                { productCode: caseInsensitiveRegex },
-                { model: { $in: modelIds } }
+        const searchQuery = {
+            $and: [
+                { isActive: true },
+                {
+                    $or: [
+                        { name: caseInsensitiveRegex },
+                        { productCode: caseInsensitiveRegex },
+                        { model: { $in: modelIds } }
+                    ]
+                }
             ]
-        });
+        };
 
-        const products = await BikeProduct.find({
-            $or: [
-                { name: caseInsensitiveRegex },
-                { productCode: caseInsensitiveRegex },
-                { model: { $in: modelIds } }
-            ]
-        })
-            .select('name _id shortDescription price imageUrl category productCode quantityAvailable')
+        const totalCount = await BikeProduct.countDocuments(searchQuery);
+
+        const products = await BikeProduct.find(searchQuery)
+            .select('name _id shortDescription price imageUrl category productCode quantityAvailable priority')
             .skip(skip)
             .limit(parseInt(limit))
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithCurrency = await convertProductPrices(products, currency);
         const totalPages = Math.ceil(totalCount / limit);
@@ -368,6 +390,7 @@ exports.getCategoryCounts = async (req, res) => {
         const { currency } = req.query;
         
         const categoriesData = await BikeProduct.aggregate([
+            { $match: { isActive: true } },
             {
                 $group: {
                     _id: '$category',
@@ -426,8 +449,8 @@ exports.getCategoryCounts = async (req, res) => {
 exports.getGarageFavorites = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
-        const products = await BikeProduct.find({ isGarageFavorite: true })
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+        const products = await BikeProduct.find({ isGarageFavorite: true, isActive: true })
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
         
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -441,8 +464,8 @@ exports.getGarageFavorites = async (req, res) => {
 exports.getNewArrivals = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
-        const products = await BikeProduct.find({ isNewArrival: true })
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+        const products = await BikeProduct.find({ isNewArrival: true, isActive: true })
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
         
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
