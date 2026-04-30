@@ -3,6 +3,7 @@ const BikeModel = require('../models/BikeModel');
 const Wishlist = require('../models/Wishlist');
 const { getConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
+const { uploadToS3, deleteFromS3 } = require('../utils/s3Upload');
 
 // Helper function to add isWishlist field to products
 const addIsWishlistToProducts = async (products, phoneNumber) => {
@@ -118,8 +119,22 @@ const convertSingleProductPrice = async (product, currency) => {
 
 exports.createProduct = async (req, res) => {
     try {
-        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
+        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, quantityAvailable, specifications, shippingAndReturn } = req.body;
         const autoBikeSpecific = model ? (isBikeSpecific !== undefined ? isBikeSpecific : true) : false;
+
+        // Handle primary image upload
+        let imageUrl = req.body.imageUrl;
+        if (req.files && req.files['image'] && req.files['image'][0]) {
+            imageUrl = await uploadToS3(req.files['image'][0], 'products');
+        }
+
+        // Handle multiple images upload
+        let images = req.body.images;
+        if (req.files && req.files['images'] && req.files['images'].length > 0) {
+            images = await Promise.all(
+                req.files['images'].map(file => uploadToS3(file, 'products'))
+            );
+        }
 
         const newProduct = new BikeProduct({
             brand,
@@ -205,18 +220,52 @@ exports.getProductById = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
     try {
-        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
+        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, quantityAvailable, specifications, shippingAndReturn } = req.body;
 
         const autoBikeSpecific = model ?
             (isBikeSpecific !== undefined ? isBikeSpecific : true) :
             false;
 
+        // Fetch old product to get existing image URLs for cleanup
+        const oldProduct = await BikeProduct.findById(req.params.id);
+        if (!oldProduct) return res.status(404).json({ success: false, message: 'Product not found' });
+
+        // Handle primary image upload
+        let imageUrl = req.body.imageUrl;
+        let oldImageUrl = null;
+        if (req.files && req.files['image'] && req.files['image'][0]) {
+            oldImageUrl = oldProduct.imageUrl;
+            imageUrl = await uploadToS3(req.files['image'][0], 'products');
+        }
+
+        // Handle multiple images upload
+        let images = req.body.images;
+        let oldImages = [];
+        if (req.files && req.files['images'] && req.files['images'].length > 0) {
+            oldImages = oldProduct.images || [];
+            images = await Promise.all(
+                req.files['images'].map(file => uploadToS3(file, 'products'))
+            );
+        }
+
+        const updateData = { brand, model, isBikeSpecific: autoBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, quantityAvailable, specifications, shippingAndReturn };
+        if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
+        if (images !== undefined) updateData.images = images;
+
         const product = await BikeProduct.findByIdAndUpdate(
             req.params.id,
-            { brand, model, isBikeSpecific: autoBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn },
+            updateData,
             { new: true }
         );
-        if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+
+        // Delete old images from S3
+        if (oldImageUrl && oldImageUrl !== product.imageUrl) {
+            await deleteFromS3(oldImageUrl);
+        }
+        if (oldImages.length > 0) {
+            await Promise.all(oldImages.map(url => deleteFromS3(url)));
+        }
+
         res.status(200).json({ success: true, data: product });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

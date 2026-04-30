@@ -1,8 +1,16 @@
 const Blog = require('../models/Blog');
+const { uploadToS3, deleteFromS3 } = require('../utils/s3Upload');
 
 exports.createBlog = async (req, res) => {
     try {
-        const { title, description, content, imageUrl } = req.body;
+        const { title, description, content } = req.body;
+        let imageUrl = req.body.imageUrl;
+
+        // Check if an image file was uploaded
+        if (req.file) {
+            imageUrl = await uploadToS3(req.file, 'blogs');
+        }
+
         const newBlog = new Blog({ title, description, content, imageUrl });
         await newBlog.save();
         res.status(201).json({ success: true, data: newBlog });
@@ -57,13 +65,36 @@ exports.getBlogById = async (req, res) => {
 
 exports.updateBlog = async (req, res) => {
     try {
-        const { title, description, content, imageUrl } = req.body;
+        const { title, description, content } = req.body;
+        let imageUrl = req.body.imageUrl;
+        let oldImageUrl = null;
+
+        if (req.file) {
+            // Fetch old blog to get the old image URL
+            const oldBlog = await Blog.findById(req.params.id);
+            if (oldBlog && oldBlog.imageUrl) {
+                oldImageUrl = oldBlog.imageUrl;
+            }
+            imageUrl = await uploadToS3(req.file, 'blogs');
+        }
+
+        const updateData = { title, description, content };
+        if (imageUrl !== undefined) {
+            updateData.imageUrl = imageUrl;
+        }
+
         const blog = await Blog.findByIdAndUpdate(
             req.params.id,
-            { title, description, content, imageUrl },
+            updateData,
             { new: true }
         );
         if (!blog) return res.status(404).json({ success: false, message: 'Blog not found' });
+        
+        // Delete old image from S3 if a new one was uploaded
+        if (oldImageUrl && oldImageUrl !== blog.imageUrl) {
+            await deleteFromS3(oldImageUrl);
+        }
+
         res.status(200).json({ success: true, data: blog });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -74,6 +105,12 @@ exports.deleteBlog = async (req, res) => {
     try {
         const blog = await Blog.findByIdAndDelete(req.params.id);
         if (!blog) return res.status(404).json({ success: false, message: 'Blog not found' });
+        
+        // Delete image from S3
+        if (blog.imageUrl) {
+            await deleteFromS3(blog.imageUrl);
+        }
+
         res.status(200).json({ success: true, data: { message: 'Blog deleted successfully' } });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

@@ -40,6 +40,17 @@ module.exports = {
     SHIPKLOUD_TRACK_ORDER_URL: process.env.SHIPKLOUD_TRACK_ORDER_URL,
 
     // COD Charges
-    COD_CHARGES: parseInt(process.env.COD_CHARGES, 10) || 300
+    COD_CHARGES: parseInt(process.env.COD_CHARGES, 10) || 300,
+
+    // AWS S3 and CDN Configuration
+    AWS_REGION: process.env.AWS_REGION,
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+    S3_BUCKET_NAME: process.env.S3_BUCKET_NAME,
+    CDN_URL: process.env.CDN_URL,
+
+    // Google Maps / Geocoding
+    GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
+    GOOGLE_GEOCODING_URL: process.env.GOOGLE_GEOCODING_URL || 'https://maps.googleapis.com/maps/api/geocode/json'
 
 };
