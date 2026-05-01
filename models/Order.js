@@ -201,9 +201,8 @@ orderSchema.index({ orderStatus: 1 });
 orderSchema.index({ orderDate: -1 });
 
 // Pre-save middleware to update timestamp
-orderSchema.pre('save', function (next) {
+orderSchema.pre('save', async function () {
     this.updatedAt = Date.now();
-    next();
 });
 
 module.exports = mongoose.model('Order', orderSchema);

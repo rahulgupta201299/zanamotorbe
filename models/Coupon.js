@@ -73,9 +73,8 @@ couponSchema.index({ code: 1, isActive: 1 });
 couponSchema.index({ expiresAt: 1 });
 
 // Pre-save middleware
-couponSchema.pre('save', function(next) {
+couponSchema.pre('save', async function() {
     this.updatedAt = Date.now();
-    next();
 });
 
 module.exports = mongoose.model('Coupon', couponSchema);

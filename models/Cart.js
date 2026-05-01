@@ -136,11 +136,10 @@ cartSchema.index({ phoneNumber: 1 });
 cartSchema.index({ status: 1 });
 
 // Pre-save middleware to calculate totals
-cartSchema.pre('save', function(next) {
+cartSchema.pre('save', async function() {
     this.subtotal = this.items.reduce((total, item) => total + item.totalPrice, 0);
     this.totalAmount = this.subtotal + this.shippingCost + this.taxAmount + (this.codCharges || 0) - this.discountAmount;
     this.updatedAt = Date.now();
-    next();
 });
 
 module.exports = mongoose.model('Cart', cartSchema);
