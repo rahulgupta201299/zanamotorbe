@@ -17,7 +17,14 @@ const razorpay = new Razorpay({
 // Create COD (Cash on Delivery) order
 exports.createCODOrder = async (req, res) => {
     try {
-        const { phoneNumber } = req.body;
+        const { phoneNumber, paymentStatus } = req.body;
+
+        if (paymentStatus !== 'cod') {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid payment status for COD order'
+            });
+        }
 
         if (!phoneNumber) {
             return res.status(400).json({
@@ -386,7 +393,14 @@ exports.cancelCODOrder = async (req, res) => {
 // Create payment order
 exports.createOrder = async (req, res) => {
     try {
-        const { phoneNumber, currency } = req.body;
+        const { phoneNumber, currency, paymentStatus } = req.body;
+
+        if (paymentStatus !== 'online') {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid payment status for online order'
+            });
+        }
 
         if (!phoneNumber) {
             return res.status(400).json({
