@@ -17,14 +17,7 @@ const razorpay = new Razorpay({
 // Create COD (Cash on Delivery) order
 exports.createCODOrder = async (req, res) => {
     try {
-        const { phoneNumber, paymentStatus } = req.body;
-
-        if (paymentStatus !== 'cod') {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid payment status for COD order'
-            });
-        }
+        const { phoneNumber } = req.body;
 
         if (!phoneNumber) {
             return res.status(400).json({
@@ -393,14 +386,7 @@ exports.cancelCODOrder = async (req, res) => {
 // Create payment order
 exports.createOrder = async (req, res) => {
     try {
-        const { phoneNumber, currency, paymentStatus } = req.body;
-
-        if (paymentStatus !== 'online') {
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid payment status for online order'
-            });
-        }
+        const { phoneNumber, currency } = req.body;
 
         if (!phoneNumber) {
             return res.status(400).json({
@@ -495,7 +481,7 @@ exports.createOrder = async (req, res) => {
             order.currency = validCurrency ? currency : 'INR';
             order.currencySymbol = currencySymbol;
             order.orderDate = new Date(); // Update date to reflect latest attempt
-            
+
             // Note: razorpayOrderId might need to be recreated if amount changed
         } else {
             // Create New Order document
@@ -637,7 +623,7 @@ exports.verifyPayment = async (req, res) => {
         order.razorpayOrderId = razorpay_order_id;
         order.razorpayPaymentId = razorpay_payment_id;
         order.razorpaySignature = razorpay_signature;
-        
+
         // Handle COD advance payment logic vs full online payment
         if (order.paymentMethod === 'cod') {
             order.paymentStatus = 'partial_paid';
@@ -844,7 +830,7 @@ exports.getPaymentStatus = async (req, res) => {
         // First try to find by orderId
         if (orderId) {
             const order = await Order.findById(orderId);
-            
+
             if (!order) {
                 return res.status(404).json({
                     success: false,
