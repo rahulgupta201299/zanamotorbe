@@ -10,6 +10,8 @@ router.get('/garage-favorite', productController.getGarageFavorites);
 router.get('/new-arrivals', productController.getNewArrivals);
 router.get('/model/:modelId', productController.getProductsByModel);
 router.get('/category/:category', productController.getProductsByCategory);
+router.get('/category/:category/subcategory/:subCategory', productController.getProductsByCategoryAndSubCategory);
+router.get('/category/:category/subcategories/count', productController.getSubCategoryCountsByCategory);
 router.get('/:id', productController.getProductById);
 router.post('/:id', productController.updateProduct);
 

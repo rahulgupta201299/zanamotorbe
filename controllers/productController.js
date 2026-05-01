@@ -284,6 +284,53 @@ exports.getProductsByCategory = async (req, res) => {
     }
 };
 
+exports.getProductsByCategoryAndSubCategory = async (req, res) => {
+    try {
+        const { phoneNumber, currency } = req.query;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 1000;
+        const skip = (page - 1) * limit;
+
+        const query = { 
+            category: { $regex: new RegExp(req.params.category, 'i') },
+            subCategory: { $regex: new RegExp(req.params.subCategory, 'i') },
+            isActive: true 
+        };
+
+        const totalProducts = await BikeProduct.countDocuments(query);
+
+        const products = await BikeProduct.find(query)
+            .skip(skip)
+            .limit(limit)
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
+
+        const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
+        const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
+
+        const totalPages = Math.ceil(totalProducts / limit);
+        const hasNextPage = page < totalPages;
+        const hasPrevPage = page > 1;
+
+        res.status(200).json({
+            success: true,
+            data: productsWithCurrency,
+            pagination: {
+                currentPage: page,
+                totalPages: totalPages,
+                totalProducts: totalProducts,
+                productsPerPage: limit,
+                hasNextPage: hasNextPage,
+                hasPrevPage: hasPrevPage,
+                nextPage: hasNextPage ? page + 1 : null,
+                prevPage: hasPrevPage ? page - 1 : null
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+
 exports.getAllProductsPaginated = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
@@ -471,6 +518,43 @@ exports.getNewArrivals = async (req, res) => {
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
         
         res.status(200).json({ success: true, data: productsWithCurrency });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getSubCategoryCountsByCategory = async (req, res) => {
+    try {
+        const { category } = req.params;
+        const subCategoriesData = await BikeProduct.aggregate([
+            { 
+                $match: { 
+                    category: { $regex: new RegExp(category, 'i') },
+                    isActive: true 
+                } 
+            },
+            {
+                $group: {
+                    _id: '$subCategory',
+                    count: { $sum: 1 }
+                }
+            },
+            {
+                $sort: { count: -1 }
+            },
+            {
+                $project: {
+                    name: '$_id',
+                    count: 1,
+                    _id: 0
+                }
+            }
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: subCategoriesData
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
