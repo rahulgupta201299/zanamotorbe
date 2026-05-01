@@ -476,8 +476,11 @@ exports.createOrder = async (req, res) => {
             order.shippingCost = cart.shippingCost;
             order.taxAmount = cart.taxAmount;
             order.discountAmount = cart.discountAmount;
+            order.codCharges = 0; // Clear COD charges for online payment
+            order.advancePaid = 0; // Clear advance paid for online payment
             order.couponCode = cart.couponCode;
             order.totalAmount = cart.totalAmount;
+            order.paymentMethod = 'online'; // Ensure paymentMethod is updated to online
             order.currency = validCurrency ? currency : 'INR';
             order.currencySymbol = currencySymbol;
             order.orderDate = new Date(); // Update date to reflect latest attempt
@@ -636,6 +639,7 @@ exports.verifyPayment = async (req, res) => {
                 });
             }
         } else {
+            order.paymentStatus = 'paid';
             if (order.orderStatus !== 'placed' && order.orderStatus !== 'delivered') {
                 order.orderStatus = 'processing';
                 order.statusHistory.push({
