@@ -154,12 +154,20 @@ exports.createProduct = async (req, res) => {
 
 exports.getProductsByModel = async (req, res) => {
     try {
-        const { phoneNumber, currency } = req.query;
+        const { phoneNumber, currency, category, subCategory } = req.query;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 1000;
         const skip = (page - 1) * limit;
 
         const query = { model: req.params.modelId, isActive: true };
+        
+        if (category) {
+            query.category = { $regex: new RegExp(category, 'i') };
+        }
+        if (subCategory) {
+            query.subCategory = { $regex: new RegExp(subCategory, 'i') };
+        }
+
         const totalProducts = await BikeProduct.countDocuments(query);
 
         const products = await BikeProduct.find(query)
