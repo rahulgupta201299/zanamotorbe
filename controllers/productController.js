@@ -3,6 +3,7 @@ const BikeModel = require('../models/BikeModel');
 const Wishlist = require('../models/Wishlist');
 const { getConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
+const mongoose = require('mongoose');
 
 // Helper function to add isWishlist field to products
 const addIsWishlistToProducts = async (products, phoneNumber) => {
@@ -501,6 +502,73 @@ exports.getCategoryCounts = async (req, res) => {
     }
 };
 
+exports.getCategoryCountsByModel = async (req, res) => {
+    try {
+        const { modelId } = req.params;
+        const { currency } = req.query;
+        
+        const categoriesData = await BikeProduct.aggregate([
+            { 
+                $match: { 
+                    model: new mongoose.Types.ObjectId(modelId),
+                    isActive: true 
+                } 
+            },
+            {
+                $group: {
+                    _id: '$category',
+                    count: { $sum: 1 },
+                    categoryIcon: { $first: '$categoryIcon' },
+                    samplePrice: { $first: '$price' }
+                }
+            },
+            {
+                $sort: { count: -1 }
+            },
+            {
+                $project: {
+                    name: '$_id',
+                    icon: '$categoryIcon',
+                    count: 1,
+                    _id: 0
+                }
+            }
+        ]);
+
+        // Get INR info for default currency
+        const inrCurrency = currencyList.find(c => c.code === 'INR');
+
+        // Convert prices if currency is provided
+        if (currency && currency !== 'INR') {
+            const validCurrency = currencyList.find(c => c.code === currency);
+            if (validCurrency) {
+                for (let cat of categoriesData) {
+                    if (cat.samplePrice) {
+                        cat.price = await getConvertedPrice(cat.samplePrice, currency);
+                        cat.currency = currency;
+                        cat.currencySymbol = validCurrency.symbol;
+                    }
+                }
+            }
+        } else {
+            // Always include INR currency info for consistency
+            for (let cat of categoriesData) {
+                if (cat.samplePrice) {
+                    cat.currency = 'INR';
+                    cat.currencySymbol = inrCurrency ? inrCurrency.symbol : '₹';
+                }
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            data: categoriesData
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 exports.getGarageFavorites = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
@@ -538,6 +606,44 @@ exports.getSubCategoryCountsByCategory = async (req, res) => {
             { 
                 $match: { 
                     category: { $regex: new RegExp(category, 'i') },
+                    isActive: true 
+                } 
+            },
+            {
+                $group: {
+                    _id: '$subCategory',
+                    count: { $sum: 1 }
+                }
+            },
+            {
+                $sort: { count: -1 }
+            },
+            {
+                $project: {
+                    name: '$_id',
+                    count: 1,
+                    _id: 0
+                }
+            }
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: subCategoriesData
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getSubCategoryCountsByCategoryAndModel = async (req, res) => {
+    try {
+        const { category, modelId } = req.params;
+        const subCategoriesData = await BikeProduct.aggregate([
+            { 
+                $match: { 
+                    category: { $regex: new RegExp(category, 'i') },
+                    model: new mongoose.Types.ObjectId(modelId),
                     isActive: true 
                 } 
             },
