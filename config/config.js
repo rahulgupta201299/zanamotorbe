@@ -40,6 +40,12 @@ module.exports = {
     SHIPKLOUD_TRACK_ORDER_URL: process.env.SHIPKLOUD_TRACK_ORDER_URL,
 
     // COD Charges
-    COD_CHARGES: parseInt(process.env.COD_CHARGES, 10) || 300
+    COD_CHARGES: parseInt(process.env.COD_CHARGES, 10) || 300,
 
+    // AWS S3 Configuration
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+    AWS_REGION: process.env.AWS_REGION || 'ap-south-1',
+    S3_BUCKET_NAME: process.env.S3_BUCKET_NAME,
+    CDN_BASE_URL: process.env.CDN_BASE_URL
 };

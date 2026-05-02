@@ -1,8 +1,15 @@
 const Blog = require('../models/Blog');
+const { uploadToS3, deleteFromS3 } = require('../utils/s3');
 
 exports.createBlog = async (req, res) => {
     try {
-        const { title, description, content, imageUrl } = req.body;
+        const { title, description, content } = req.body;
+        let imageUrl = req.body.imageUrl;
+
+        if (req.file) {
+            imageUrl = await uploadToS3(req.file, 'blogs');
+        }
+
         const newBlog = new Blog({ title, description, content, imageUrl });
         await newBlog.save();
         res.status(201).json({ success: true, data: newBlog });
@@ -57,13 +64,32 @@ exports.getBlogById = async (req, res) => {
 
 exports.updateBlog = async (req, res) => {
     try {
-        const { title, description, content, imageUrl } = req.body;
-        const blog = await Blog.findByIdAndUpdate(
-            req.params.id,
-            { title, description, content, imageUrl },
-            { new: true }
-        );
-        if (!blog) return res.status(404).json({ success: false, message: 'Blog not found' });
+        const { title, description, content } = req.body;
+        let imageUrl = req.body.imageUrl;
+
+        const existingBlog = await Blog.findById(req.params.id);
+        if (!existingBlog) return res.status(404).json({ success: false, message: 'Blog not found' });
+
+        if (req.file) {
+            imageUrl = await uploadToS3(req.file, 'blogs');
+            if (existingBlog.imageUrl) {
+                await deleteFromS3(existingBlog.imageUrl);
+            }
+        } else if (!imageUrl && existingBlog.imageUrl) {
+            // Keep old image if no new file is uploaded and no explicit imageUrl provided
+            imageUrl = existingBlog.imageUrl;
+        } else if (imageUrl !== existingBlog.imageUrl && existingBlog.imageUrl) {
+            // If a different explicit string url was sent or null to remove it
+            await deleteFromS3(existingBlog.imageUrl);
+        }
+
+        existingBlog.title = title || existingBlog.title;
+        existingBlog.description = description !== undefined ? description : existingBlog.description;
+        existingBlog.content = content || existingBlog.content;
+        existingBlog.imageUrl = imageUrl;
+
+        const blog = await existingBlog.save();
+        
         res.status(200).json({ success: true, data: blog });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -74,6 +100,11 @@ exports.deleteBlog = async (req, res) => {
     try {
         const blog = await Blog.findByIdAndDelete(req.params.id);
         if (!blog) return res.status(404).json({ success: false, message: 'Blog not found' });
+        
+        if (blog.imageUrl) {
+            await deleteFromS3(blog.imageUrl);
+        }
+        
         res.status(200).json({ success: true, data: { message: 'Blog deleted successfully' } });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
