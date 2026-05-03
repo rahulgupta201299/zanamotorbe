@@ -3,14 +3,14 @@ const { uploadToS3, deleteFromS3 } = require('../utils/s3');
 
 exports.createBlog = async (req, res) => {
     try {
-        const { title, description, content } = req.body;
+        const { title, description, content, isActive } = req.body;
         let imageUrl = req.body.imageUrl;
 
         if (req.file) {
             imageUrl = await uploadToS3(req.file, 'blogs');
         }
 
-        const newBlog = new Blog({ title, description, content, imageUrl });
+        const newBlog = new Blog({ title, description, content, imageUrl, isActive });
         await newBlog.save();
         res.status(201).json({ success: true, data: newBlog });
     } catch (error) {
@@ -24,11 +24,16 @@ exports.getAllBlogs = async (req, res) => {
         const limit = parseInt(req.query.limit) || 100;
         const skip = (page - 1) * limit;
 
+        const query = {};
+        if (req.query.all !== 'true') {
+            query.isActive = true;
+        }
+
         // Get total count for pagination metadata
-        const totalBlogs = await Blog.countDocuments();
+        const totalBlogs = await Blog.countDocuments(query);
 
         // Fetch paginated blogs
-        const blogs = await Blog.find()
+        const blogs = await Blog.find(query)
             .sort({ createdAt: -1 }) // Sort by newest first
             .skip(skip)
             .limit(limit);
@@ -64,7 +69,7 @@ exports.getBlogById = async (req, res) => {
 
 exports.updateBlog = async (req, res) => {
     try {
-        const { title, description, content } = req.body;
+        const { title, description, content, isActive } = req.body;
         let imageUrl = req.body.imageUrl;
 
         const existingBlog = await Blog.findById(req.params.id);
@@ -87,6 +92,9 @@ exports.updateBlog = async (req, res) => {
         existingBlog.description = description !== undefined ? description : existingBlog.description;
         existingBlog.content = content || existingBlog.content;
         existingBlog.imageUrl = imageUrl;
+        if (isActive !== undefined) {
+            existingBlog.isActive = isActive;
+        }
 
         const blog = await existingBlog.save();
         
@@ -125,9 +133,12 @@ exports.recommendBlogsByTitle = async (req, res) => {
         // Create a case-insensitive regex search for title keywords
         const titleRegex = new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
-        const blogs = await Blog.find({
-            title: { $regex: titleRegex }
-        })
+        const query = { title: { $regex: titleRegex } };
+        if (req.query.all !== 'true') {
+            query.isActive = true;
+        }
+
+        const blogs = await Blog.find(query)
         .limit(parseInt(limit))
         .sort({ createdAt: -1 }); // Sort by newest first
 

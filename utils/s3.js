@@ -19,8 +19,11 @@ const s3Client = new S3Client({
 exports.uploadToS3 = async (file, folder) => {
     if (!file) return null;
 
-    // Clean up spaces from the original file name to avoid URL encoding issues
-    const fileName = file.originalname.replace(/\s+/g, '-');
+    // Clean up spaces and append a unique suffix to avoid overwriting files
+    const ext = path.extname(file.originalname);
+    const baseName = path.basename(file.originalname, ext).replace(/\s+/g, '-');
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const fileName = `${baseName}-${uniqueSuffix}${ext}`;
     const key = `${folder}/${fileName}`;
 
     const command = new PutObjectCommand({

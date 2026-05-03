@@ -35,7 +35,7 @@ exports.updateBrand = async (req, res) => {
 
 exports.getAllBrands = async (req, res) => {
     try {
-        const brands = await BikeBrand.find({ isActive: true });
+        const brands = await BikeBrand.find();
         res.status(200).json({ success: true, data: brands });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
