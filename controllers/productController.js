@@ -4,6 +4,7 @@ const Wishlist = require('../models/Wishlist');
 const { getConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
 const mongoose = require('mongoose');
+const { uploadToS3, deleteFromS3 } = require('../utils/s3');
 
 // Helper function to add isWishlist field to products
 const addIsWishlistToProducts = async (products, phoneNumber) => {
@@ -119,8 +120,29 @@ const convertSingleProductPrice = async (product, currency) => {
 
 exports.createProduct = async (req, res) => {
     try {
-        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, isComingSoon, shortDescription, longDescription, description, category, subCategory, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn, isActive, priority } = req.body;
+        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, isComingSoon, shortDescription, longDescription, description, category, subCategory, categoryIcon, price, quantityAvailable, specifications, shippingAndReturn, isActive, priority } = req.body;
         const autoBikeSpecific = model ? (isBikeSpecific !== undefined ? isBikeSpecific : true) : false;
+
+        let imageUrl = req.body.imageUrl;
+        let images = req.body.images;
+        
+        if (!images) {
+            images = [];
+        } else if (!Array.isArray(images)) {
+            images = [images];
+        }
+
+        if (req.files) {
+            if (req.files.image && req.files.image.length > 0) {
+                imageUrl = await uploadToS3(req.files.image[0], 'products');
+            }
+            if (req.files.images && req.files.images.length > 0) {
+                for (const file of req.files.images) {
+                    const url = await uploadToS3(file, 'products');
+                    images.push(url);
+                }
+            }
+        }
 
         const newProduct = new BikeProduct({
             brand,
@@ -219,7 +241,44 @@ exports.getProductById = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
     try {
-        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, isComingSoon, shortDescription, longDescription, description, category, subCategory, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn, isActive, priority } = req.body;
+        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, isComingSoon, shortDescription, longDescription, description, category, subCategory, categoryIcon, price, quantityAvailable, specifications, shippingAndReturn, isActive, priority } = req.body;
+
+        const existingProduct = await BikeProduct.findById(req.params.id);
+        if (!existingProduct) return res.status(404).json({ success: false, message: 'Product not found' });
+
+        let imageUrl = req.body.imageUrl;
+        if (req.files && req.files.image && req.files.image.length > 0) {
+            imageUrl = await uploadToS3(req.files.image[0], 'products');
+            if (existingProduct.imageUrl) {
+                await deleteFromS3(existingProduct.imageUrl);
+            }
+        } else if (imageUrl === undefined) {
+            imageUrl = existingProduct.imageUrl;
+        } else if (imageUrl !== existingProduct.imageUrl && existingProduct.imageUrl) {
+            await deleteFromS3(existingProduct.imageUrl);
+        }
+
+        let updatedImages = existingProduct.images || [];
+
+        if (req.body.images !== undefined) {
+            let retainedImages = req.body.images;
+            if (!Array.isArray(retainedImages)) {
+                retainedImages = retainedImages ? [retainedImages] : [];
+            }
+            
+            const deletedImages = updatedImages.filter(url => !retainedImages.includes(url));
+            for (const url of deletedImages) {
+                await deleteFromS3(url);
+            }
+            updatedImages = [...retainedImages];
+        }
+
+        if (req.files && req.files.images && req.files.images.length > 0) {
+            for (const file of req.files.images) {
+                const url = await uploadToS3(file, 'products');
+                updatedImages.push(url);
+            }
+        }
 
         const autoBikeSpecific = model ?
             (isBikeSpecific !== undefined ? isBikeSpecific : true) :
@@ -229,7 +288,7 @@ exports.updateProduct = async (req, res) => {
             brand, model, isBikeSpecific: autoBikeSpecific, name, productCode, 
             isNewArrival, isGarageFavorite, isComingSoon, shortDescription, 
             longDescription, description, category, subCategory, categoryIcon, 
-            price, imageUrl, images, quantityAvailable, specifications, 
+            price, imageUrl, images: updatedImages, quantityAvailable, specifications, 
             shippingAndReturn, isActive, priority 
         };
 
@@ -241,7 +300,6 @@ exports.updateProduct = async (req, res) => {
             updateFields,
             { new: true }
         );
-        if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
         res.status(200).json({ success: true, data: product });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -669,6 +727,27 @@ exports.getSubCategoryCountsByCategoryAndModel = async (req, res) => {
             success: true,
             data: subCategoriesData
         });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.deleteProduct = async (req, res) => {
+    try {
+        const product = await BikeProduct.findByIdAndDelete(req.params.id);
+        if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+        
+        if (product.imageUrl) {
+            await deleteFromS3(product.imageUrl);
+        }
+        
+        if (product.images && product.images.length > 0) {
+            for (const url of product.images) {
+                await deleteFromS3(url);
+            }
+        }
+        
+        res.status(200).json({ success: true, data: { message: 'Product deleted successfully' } });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
