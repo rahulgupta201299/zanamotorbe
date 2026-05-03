@@ -52,4 +52,7 @@ module.exports = {
     // Google Maps Configuration
     GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
     GOOGLE_MAPS_GEOLOCATION_URL: process.env.GOOGLE_MAPS_GEOLOCATION_URL,
+
+    // Pincode Validation Configuration
+    PINCODE_VALIDATOR_API_URL: process.env.PINCODE_VALIDATOR_API_URL,
 };

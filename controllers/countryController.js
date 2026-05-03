@@ -94,3 +94,44 @@ exports.getCurrencies = async (req, res) => {
         });
     }
 };
+
+exports.validatePincode = async (req, res) => {
+    try {
+        const { pincode } = req.params;
+
+        if (!pincode) {
+            return res.status(400).json({ success: false, message: 'Pincode is required' });
+        }
+
+        // Basic Indian pincode regex: 6 digits, shouldn't start with 0
+        const pincodeRegex = /^[1-9][0-9]{5}$/;
+        if (!pincodeRegex.test(pincode)) {
+            return res.status(400).json({ success: false, message: 'Invalid Indian pincode format' });
+        }
+
+        const response = await axios.get(`${config.PINCODE_VALIDATOR_API_URL}/${pincode}`);
+        const data = response.data;
+
+        if (data && data.length > 0 && data[0].Status === 'Success') {
+            const postOffices = data[0].PostOffice;
+            res.status(200).json({
+                success: true,
+                message: 'Pincode is valid',
+                data: {
+                    pincode,
+                    district: postOffices[0].District,
+                    state: postOffices[0].State,
+                    country: postOffices[0].Country
+                }
+            });
+        } else {
+            res.status(404).json({ success: false, message: 'Invalid pincode or details not found' });
+        }
+    } catch (error) {
+        console.error('Error validating pincode:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error validating pincode'
+        });
+    }
+};
