@@ -47,5 +47,9 @@ module.exports = {
     AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
     AWS_REGION: process.env.AWS_REGION || 'ap-south-1',
     S3_BUCKET_NAME: process.env.S3_BUCKET_NAME,
-    CDN_BASE_URL: process.env.CDN_BASE_URL
+    CDN_BASE_URL: process.env.CDN_BASE_URL,
+
+    // Google Maps Configuration
+    GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
+    GOOGLE_MAPS_GEOLOCATION_URL: process.env.GOOGLE_MAPS_GEOLOCATION_URL,
 };
