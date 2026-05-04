@@ -476,12 +476,15 @@ exports.createOrder = async (req, res) => {
             order.shippingCost = cart.shippingCost;
             order.taxAmount = cart.taxAmount;
             order.discountAmount = cart.discountAmount;
+            order.codCharges = 0; // Clear COD charges for online payment
+            order.advancePaid = 0; // Clear advance paid for online payment
             order.couponCode = cart.couponCode;
             order.totalAmount = cart.totalAmount;
+            order.paymentMethod = 'online'; // Ensure paymentMethod is updated to online
             order.currency = validCurrency ? currency : 'INR';
             order.currencySymbol = currencySymbol;
             order.orderDate = new Date(); // Update date to reflect latest attempt
-            
+
             // Note: razorpayOrderId might need to be recreated if amount changed
         } else {
             // Create New Order document
@@ -623,7 +626,7 @@ exports.verifyPayment = async (req, res) => {
         order.razorpayOrderId = razorpay_order_id;
         order.razorpayPaymentId = razorpay_payment_id;
         order.razorpaySignature = razorpay_signature;
-        
+
         // Handle COD advance payment logic vs full online payment
         if (order.paymentMethod === 'cod') {
             order.paymentStatus = 'partial_paid';
@@ -636,6 +639,7 @@ exports.verifyPayment = async (req, res) => {
                 });
             }
         } else {
+            order.paymentStatus = 'paid';
             if (order.orderStatus !== 'placed' && order.orderStatus !== 'delivered') {
                 order.orderStatus = 'processing';
                 order.statusHistory.push({
@@ -830,7 +834,7 @@ exports.getPaymentStatus = async (req, res) => {
         // First try to find by orderId
         if (orderId) {
             const order = await Order.findById(orderId);
-            
+
             if (!order) {
                 return res.status(404).json({
                     success: false,

@@ -3,6 +3,7 @@ const BikeModel = require('../models/BikeModel');
 const Wishlist = require('../models/Wishlist');
 const { getConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
+const mongoose = require('mongoose');
 
 // Helper function to add isWishlist field to products
 const addIsWishlistToProducts = async (products, phoneNumber) => {
@@ -118,7 +119,7 @@ const convertSingleProductPrice = async (product, currency) => {
 
 exports.createProduct = async (req, res) => {
     try {
-        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
+        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, isComingSoon, shortDescription, longDescription, description, category, subCategory, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn, isActive, priority } = req.body;
         const autoBikeSpecific = model ? (isBikeSpecific !== undefined ? isBikeSpecific : true) : false;
 
         const newProduct = new BikeProduct({
@@ -129,17 +130,21 @@ exports.createProduct = async (req, res) => {
             productCode,
             isNewArrival,
             isGarageFavorite,
+            isComingSoon,
             shortDescription,
             longDescription,
             description,
             category,
+            subCategory,
             categoryIcon,
             price,
             imageUrl,
             images,
             quantityAvailable,
             specifications,
-            shippingAndReturn
+            shippingAndReturn,
+            isActive,
+            priority
         });
         await newProduct.save();
         res.status(201).json({ success: true, data: newProduct });
@@ -150,17 +155,26 @@ exports.createProduct = async (req, res) => {
 
 exports.getProductsByModel = async (req, res) => {
     try {
-        const { phoneNumber, currency } = req.query;
+        const { phoneNumber, currency, category, subCategory } = req.query;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 1000;
         const skip = (page - 1) * limit;
 
-        const totalProducts = await BikeProduct.countDocuments({ model: req.params.modelId });
+        const query = { model: req.params.modelId, isActive: true };
+        
+        if (category) {
+            query.category = { $regex: new RegExp(category, 'i') };
+        }
+        if (subCategory) {
+            query.subCategory = { $regex: new RegExp(subCategory, 'i') };
+        }
 
-        const products = await BikeProduct.find({ model: req.params.modelId })
+        const totalProducts = await BikeProduct.countDocuments(query);
+
+        const products = await BikeProduct.find(query)
             .skip(skip)
             .limit(limit)
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -191,7 +205,7 @@ exports.getProductsByModel = async (req, res) => {
 exports.getProductById = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
-        const product = await BikeProduct.findById(req.params.id);
+        const product = await BikeProduct.findOne({ _id: req.params.id, isActive: true });
         if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
         
         const productsWithWishlist = await addIsWishlistToProducts([product], phoneNumber);
@@ -205,15 +219,26 @@ exports.getProductById = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
     try {
-        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
+        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, isComingSoon, shortDescription, longDescription, description, category, subCategory, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn, isActive, priority } = req.body;
 
         const autoBikeSpecific = model ?
             (isBikeSpecific !== undefined ? isBikeSpecific : true) :
             false;
 
+        const updateFields = { 
+            brand, model, isBikeSpecific: autoBikeSpecific, name, productCode, 
+            isNewArrival, isGarageFavorite, isComingSoon, shortDescription, 
+            longDescription, description, category, subCategory, categoryIcon, 
+            price, imageUrl, images, quantityAvailable, specifications, 
+            shippingAndReturn, isActive, priority 
+        };
+
+        // Remove undefined fields
+        Object.keys(updateFields).forEach(key => updateFields[key] === undefined && delete updateFields[key]);
+
         const product = await BikeProduct.findByIdAndUpdate(
             req.params.id,
-            { brand, model, isBikeSpecific: autoBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn },
+            updateFields,
             { new: true }
         );
         if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
@@ -230,12 +255,17 @@ exports.getProductsByCategory = async (req, res) => {
         const limit = parseInt(req.query.limit) || 1000;
         const skip = (page - 1) * limit;
 
-        const totalProducts = await BikeProduct.countDocuments({ category: { $regex: new RegExp(req.params.category, 'i') } });
+        const query = { 
+            category: { $regex: new RegExp(req.params.category, 'i') },
+            isActive: true 
+        };
 
-        const products = await BikeProduct.find({ category: { $regex: new RegExp(req.params.category, 'i') } })
+        const totalProducts = await BikeProduct.countDocuments(query);
+
+        const products = await BikeProduct.find(query)
             .skip(skip)
             .limit(limit)
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -263,6 +293,53 @@ exports.getProductsByCategory = async (req, res) => {
     }
 };
 
+exports.getProductsByCategoryAndSubCategory = async (req, res) => {
+    try {
+        const { phoneNumber, currency } = req.query;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 1000;
+        const skip = (page - 1) * limit;
+
+        const query = { 
+            category: { $regex: new RegExp(req.params.category, 'i') },
+            subCategory: { $regex: new RegExp(req.params.subCategory, 'i') },
+            isActive: true 
+        };
+
+        const totalProducts = await BikeProduct.countDocuments(query);
+
+        const products = await BikeProduct.find(query)
+            .skip(skip)
+            .limit(limit)
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
+
+        const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
+        const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
+
+        const totalPages = Math.ceil(totalProducts / limit);
+        const hasNextPage = page < totalPages;
+        const hasPrevPage = page > 1;
+
+        res.status(200).json({
+            success: true,
+            data: productsWithCurrency,
+            pagination: {
+                currentPage: page,
+                totalPages: totalPages,
+                totalProducts: totalProducts,
+                productsPerPage: limit,
+                hasNextPage: hasNextPage,
+                hasPrevPage: hasPrevPage,
+                nextPage: hasNextPage ? page + 1 : null,
+                prevPage: hasPrevPage ? page - 1 : null
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+
 exports.getAllProductsPaginated = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
@@ -270,12 +347,12 @@ exports.getAllProductsPaginated = async (req, res) => {
         const limit = parseInt(req.query.limit) || 1000;
         const skip = (page - 1) * limit;
 
-        const totalProducts = await BikeProduct.countDocuments();
+        const totalProducts = await BikeProduct.countDocuments({ isActive: true });
 
-        const products = await BikeProduct.find()
+        const products = await BikeProduct.find({ isActive: true })
             .skip(skip)
             .limit(limit)
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -318,28 +395,29 @@ exports.searchProducts = async (req, res) => {
         const escapedQuery = decodedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, ' ').trim();
         const caseInsensitiveRegex = { $regex: escapedQuery, $options: 'i' };
 
-        const matchingModels = await BikeModel.find({ name: caseInsensitiveRegex }).select('_id');
+        const matchingModels = await BikeModel.find({ name: caseInsensitiveRegex, isActive: true }).select('_id');
         const modelIds = matchingModels.map(m => m._id);
 
-        const totalCount = await BikeProduct.countDocuments({
-            $or: [
-                { name: caseInsensitiveRegex },
-                { productCode: caseInsensitiveRegex },
-                { model: { $in: modelIds } }
+        const searchQuery = {
+            $and: [
+                { isActive: true },
+                {
+                    $or: [
+                        { name: caseInsensitiveRegex },
+                        { productCode: caseInsensitiveRegex },
+                        { model: { $in: modelIds } }
+                    ]
+                }
             ]
-        });
+        };
 
-        const products = await BikeProduct.find({
-            $or: [
-                { name: caseInsensitiveRegex },
-                { productCode: caseInsensitiveRegex },
-                { model: { $in: modelIds } }
-            ]
-        })
-            .select('name _id shortDescription price imageUrl category productCode quantityAvailable')
+        const totalCount = await BikeProduct.countDocuments(searchQuery);
+
+        const products = await BikeProduct.find(searchQuery)
+            .select('name _id shortDescription price imageUrl category productCode quantityAvailable priority')
             .skip(skip)
             .limit(parseInt(limit))
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithCurrency = await convertProductPrices(products, currency);
         const totalPages = Math.ceil(totalCount / limit);
@@ -368,6 +446,74 @@ exports.getCategoryCounts = async (req, res) => {
         const { currency } = req.query;
         
         const categoriesData = await BikeProduct.aggregate([
+            { $match: { isActive: true } },
+            {
+                $group: {
+                    _id: '$category',
+                    count: { $sum: 1 },
+                    categoryIcon: { $first: '$categoryIcon' },
+                    samplePrice: { $first: '$price' }
+                }
+            },
+            {
+                $sort: { count: -1 }
+            },
+            {
+                $project: {
+                    name: '$_id',
+                    icon: '$categoryIcon',
+                    count: 1,
+                    _id: 0
+                }
+            }
+        ]);
+
+        // Get INR info for default currency
+        const inrCurrency = currencyList.find(c => c.code === 'INR');
+
+        // Convert prices if currency is provided
+        if (currency && currency !== 'INR') {
+            const validCurrency = currencyList.find(c => c.code === currency);
+            if (validCurrency) {
+                for (let cat of categoriesData) {
+                    if (cat.samplePrice) {
+                        cat.price = await getConvertedPrice(cat.samplePrice, currency);
+                        cat.currency = currency;
+                        cat.currencySymbol = validCurrency.symbol;
+                    }
+                }
+            }
+        } else {
+            // Always include INR currency info for consistency
+            for (let cat of categoriesData) {
+                if (cat.samplePrice) {
+                    cat.currency = 'INR';
+                    cat.currencySymbol = inrCurrency ? inrCurrency.symbol : '₹';
+                }
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            data: categoriesData
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getCategoryCountsByModel = async (req, res) => {
+    try {
+        const { modelId } = req.params;
+        const { currency } = req.query;
+        
+        const categoriesData = await BikeProduct.aggregate([
+            { 
+                $match: { 
+                    model: new mongoose.Types.ObjectId(modelId),
+                    isActive: true 
+                } 
+            },
             {
                 $group: {
                     _id: '$category',
@@ -426,8 +572,8 @@ exports.getCategoryCounts = async (req, res) => {
 exports.getGarageFavorites = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
-        const products = await BikeProduct.find({ isGarageFavorite: true })
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+        const products = await BikeProduct.find({ isGarageFavorite: true, isActive: true })
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
         
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -441,13 +587,88 @@ exports.getGarageFavorites = async (req, res) => {
 exports.getNewArrivals = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
-        const products = await BikeProduct.find({ isNewArrival: true })
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+        const products = await BikeProduct.find({ isNewArrival: true, isActive: true })
+            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
         
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
         
         res.status(200).json({ success: true, data: productsWithCurrency });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getSubCategoryCountsByCategory = async (req, res) => {
+    try {
+        const { category } = req.params;
+        const subCategoriesData = await BikeProduct.aggregate([
+            { 
+                $match: { 
+                    category: { $regex: new RegExp(category, 'i') },
+                    isActive: true 
+                } 
+            },
+            {
+                $group: {
+                    _id: '$subCategory',
+                    count: { $sum: 1 }
+                }
+            },
+            {
+                $sort: { count: -1 }
+            },
+            {
+                $project: {
+                    name: '$_id',
+                    count: 1,
+                    _id: 0
+                }
+            }
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: subCategoriesData
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getSubCategoryCountsByCategoryAndModel = async (req, res) => {
+    try {
+        const { category, modelId } = req.params;
+        const subCategoriesData = await BikeProduct.aggregate([
+            { 
+                $match: { 
+                    category: { $regex: new RegExp(category, 'i') },
+                    model: new mongoose.Types.ObjectId(modelId),
+                    isActive: true 
+                } 
+            },
+            {
+                $group: {
+                    _id: '$subCategory',
+                    count: { $sum: 1 }
+                }
+            },
+            {
+                $sort: { count: -1 }
+            },
+            {
+                $project: {
+                    name: '$_id',
+                    count: 1,
+                    _id: 0
+                }
+            }
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: subCategoriesData
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

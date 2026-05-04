@@ -9,6 +9,10 @@ const bikeBrandSchema = new mongoose.Schema({
     description: {
         type: String
     },
+    isActive: {
+        type: Boolean,
+        default: true
+    },
     createdAt: {
         type: Date,
         default: Date.now

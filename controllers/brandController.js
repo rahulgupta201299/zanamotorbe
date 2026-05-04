@@ -4,8 +4,8 @@ const BikeProduct = require('../models/BikeProduct');
 
 exports.createBrand = async (req, res) => {
     try {
-        const { name, description } = req.body;
-        const newBrand = new BikeBrand({ name, description });
+        const { name, description, isActive } = req.body;
+        const newBrand = new BikeBrand({ name, description, isActive });
         await newBrand.save();
         res.status(201).json({ success: true, data: newBrand });
     } catch (error) {
@@ -15,10 +15,15 @@ exports.createBrand = async (req, res) => {
 
 exports.updateBrand = async (req, res) => {
     try {
-        const { name, description } = req.body;
+        const { name, description, isActive } = req.body;
+        const updateFields = {};
+        if (name !== undefined) updateFields.name = name;
+        if (description !== undefined) updateFields.description = description;
+        if (isActive !== undefined) updateFields.isActive = isActive;
+
         const brand = await BikeBrand.findByIdAndUpdate(
             req.params.id,
-            { name, description },
+            updateFields,
             { new: true }
         );
         if (!brand) return res.status(404).json({ success: false, message: 'Brand not found' });
@@ -30,7 +35,7 @@ exports.updateBrand = async (req, res) => {
 
 exports.getAllBrands = async (req, res) => {
     try {
-        const brands = await BikeBrand.find();
+        const brands = await BikeBrand.find({ isActive: true });
         res.status(200).json({ success: true, data: brands });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -40,21 +45,19 @@ exports.getAllBrands = async (req, res) => {
 exports.getBrandsWithModels = async (req, res) => {
     try {
         const { category, page = 1, limit = 1000 } = req.query;
-        
+
         const pageNum = parseInt(page) > 0 ? parseInt(page) : 1;
         const limitNum = parseInt(limit) > 0 ? parseInt(limit) : 1000;
         const skip = (pageNum - 1) * limitNum;
 
-        // Get total count of brands with models
-        const brands = await BikeBrand.find();
+        const brands = await BikeBrand.find({ isActive: true });
         const brandsWithModels = [];
         const brandModelCounts = [];
 
         for (const brand of brands) {
-            const modelQuery = { brand: brand._id };
-            if (category) {
-                modelQuery.category = category;
-            }
+            const modelQuery = { brand: brand._id, isActive: true };
+            if (category) modelQuery.category = category;
+
             const models = await BikeModel.find(modelQuery);
             if (models.length > 0) {
                 brandsWithModels.push({
