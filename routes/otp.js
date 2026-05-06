@@ -14,4 +14,10 @@ router.post('/generate-email', otpController.generateEmailOTP);
 // Verify OTP (Email)
 router.post('/verify-email', otpController.verifyEmailOTP);
 
+// Generate and send OTP (Admin Email)
+router.post('/generate-admin-email', otpController.generateAdminEmailOTP);
+
+// Verify OTP (Admin Email)
+router.post('/verify-admin-email', otpController.verifyAdminEmailOTP);
+
 module.exports = router;

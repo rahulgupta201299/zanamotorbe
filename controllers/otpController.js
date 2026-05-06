@@ -347,3 +347,155 @@ exports.verifyEmailOTP = async (req, res) => {
         });
     }
 };
+
+// Generate and send OTP to admin's email address
+exports.generateAdminEmailOTP = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        // Validate required input parameters
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email is required'
+            });
+        }
+
+        // Check if email exists in the admin emails list
+        const adminEmails = config.ADMIN_EMAILS || [];
+        if (!adminEmails.includes(email)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Unauthorized: Email is not an admin email'
+            });
+        }
+
+        const isBypassMode = config.BYPASS_OTP;
+
+        // Generate a new 6-digit OTP code
+        const otpCode = isBypassMode ? '123456' : generateOTPCode();
+
+        // Delete any existing unverified OTPs for this email to prevent duplicates
+        await OTP.deleteMany({ email });
+
+        // Create a new OTP record in the database
+        const otpRecord = await OTP.create({
+            email,
+            otp: otpCode
+        });
+
+        // Send OTP via email
+        let emailResult = { success: true };
+        if (!isBypassMode) {
+            emailResult = await emailUtils.sendEmailOTP(email, otpCode);
+        }
+
+        if (emailResult.success) {
+            res.status(200).json({
+                success: true,
+                data: {
+                    message: `OTP sent successfully to ${email}${isBypassMode ? ' (Bypassed)' : ''}`,
+                    email: email,
+                    expiresIn: '5 minutes'
+                }
+            });
+        } else {
+            // Clean up the OTP record if email sending failed
+            await OTP.deleteOne({ _id: otpRecord._id });
+
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to send OTP via email. Please check your configuration.'
+            });
+        }
+
+    } catch (error) {
+        console.log('Error in generateAdminEmailOTP:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while generating admin email OTP'
+        });
+    }
+};
+
+// Verify admin email OTP entered by user
+exports.verifyAdminEmailOTP = async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+
+        // Validate required input parameters
+        if (!email || !otp) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email and OTP are required'
+            });
+        }
+
+        // Check if email exists in the admin emails list
+        const adminEmails = config.ADMIN_EMAILS || [];
+        if (!adminEmails.includes(email)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Unauthorized: Email is not an admin email'
+            });
+        }
+
+        // Find the most recent unverified OTP for this email
+        const otpRecord = await OTP.findOne({
+            email,
+            isVerified: false
+        }).sort({ createdAt: -1 });
+
+        const isBypassMode = config.BYPASS_OTP;
+        const isBypassValid = isBypassMode && (otp === '123456');
+
+        if (!isBypassValid) {
+            // Check if any OTP record exists
+            if (!otpRecord) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No valid OTP found. OTP may have expired or was never sent. Please request a new OTP.'
+                });
+            }
+
+            // Check if OTP has expired
+            if (new Date() > otpRecord.expiresAt) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'OTP has expired. Please request a new OTP.'
+                });
+            }
+
+            // Verify the OTP matches the stored code
+            if (otpRecord.otp !== otp) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid OTP. Please check and try again.'
+                });
+            }
+        }
+
+        // Mark OTP as verified to prevent reuse
+        if (otpRecord) {
+            otpRecord.isVerified = true;
+            await otpRecord.save();
+        }
+
+        // Return verification success without profile data check for admin
+        res.status(200).json({
+            success: true,
+            data: {
+                message: 'Admin Email OTP verified successfully',
+                email: email,
+                verified: true
+            }
+        });
+
+    } catch (error) {
+        console.log('Error in verifyAdminEmailOTP:', error);
+        res.status(500).json({
+            success: false,
+            message: 'An error occurred while verifying admin email OTP'
+        });
+    }
+};
