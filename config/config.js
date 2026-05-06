@@ -7,7 +7,7 @@ module.exports = {
     PORT: process.env.PORT || 3000,
 
     // Database Configuration
-    MONGODB_URI: process.env.MONGODB_URI || 'mongodb://harshdedhia:harshdedhia@ac-zcymstg-shard-00-00.ifdwfzi.mongodb.net:27017,ac-zcymstg-shard-00-01.ifdwfzi.mongodb.net:27017,ac-zcymstg-shard-00-02.ifdwfzi.mongodb.net:27017/zana?ssl=true&replicaSet=atlas-408z5n-shard-0&authSource=admin&appName=Cluster0' || 'mongodb://localhost:27017/zana-motors',
+    MONGODB_URI: process.env.MONGODB_URI || 'mongodb://localhost:27017/zana-motors',
 
     // Twilio Configuration
     TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID,
