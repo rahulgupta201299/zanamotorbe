@@ -133,8 +133,9 @@ exports.createProduct = async (req, res) => {
         }
 
         if (req.files) {
-            if (req.files.image && req.files.image.length > 0) {
-                imageUrl = await uploadToS3(req.files.image[0], 'products');
+            const mainImageFile = req.files.imageUrl?.[0] || req.files.image?.[0];
+            if (mainImageFile) {
+                imageUrl = await uploadToS3(mainImageFile, 'products');
             }
             if (req.files.images && req.files.images.length > 0) {
                 for (const file of req.files.images) {
@@ -247,8 +248,9 @@ exports.updateProduct = async (req, res) => {
         if (!existingProduct) return res.status(404).json({ success: false, message: 'Product not found' });
 
         let imageUrl = req.body.imageUrl;
-        if (req.files && req.files.image && req.files.image.length > 0) {
-            imageUrl = await uploadToS3(req.files.image[0], 'products');
+        const mainImageFile = req.files?.imageUrl?.[0] || req.files?.image?.[0];
+        if (mainImageFile) {
+            imageUrl = await uploadToS3(mainImageFile, 'products');
             if (existingProduct.imageUrl) {
                 await deleteFromS3(existingProduct.imageUrl);
             }
