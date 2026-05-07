@@ -11,10 +11,10 @@ const addIsWishlistToProducts = async (products, phoneNumber) => {
     if (!phoneNumber) {
         return products.map(product => ({ ...product.toObject(), isWishlist: false }));
     }
-    
+
     const wishlist = await Wishlist.findOne({ phoneNumber });
     const wishlistProductIds = wishlist ? wishlist.products.map(id => id.toString()) : [];
-    
+
     return products.map(product => ({
         ...product.toObject(),
         isWishlist: wishlistProductIds.includes(product._id.toString())
@@ -29,7 +29,7 @@ const convertProductPrices = async (products, currency) => {
 
     // Get INR info for default currency
     const inrCurrency = currencyList.find(c => c.code === 'INR');
-    
+
     if (!currency || currency === 'INR') {
         // For INR, still add currency info for consistency
         const convertedProducts = products.map((product) => {
@@ -64,7 +64,7 @@ const convertProductPrices = async (products, currency) => {
             const productObj = product.toObject ? product.toObject() : product;
             const originalPrice = productObj.price || 0;
             const convertedPrice = await getConvertedPrice(originalPrice, currency);
-            
+
             return {
                 ...productObj,
                 price: convertedPrice,
@@ -82,7 +82,7 @@ const convertProductPrices = async (products, currency) => {
 const convertSingleProductPrice = async (product, currency) => {
     // Get INR info for default currency
     const inrCurrency = currencyList.find(c => c.code === 'INR');
-    
+
     if (!currency || currency === 'INR') {
         // For INR, still add currency info for consistency
         const productObj = product.toObject ? product.toObject() : product;
@@ -125,7 +125,7 @@ exports.createProduct = async (req, res) => {
 
         let imageUrl = req.body.imageUrl;
         let images = req.body.images;
-        
+
         if (!images) {
             images = [];
         } else if (!Array.isArray(images)) {
@@ -184,7 +184,7 @@ exports.getProductsByModel = async (req, res) => {
         const skip = (page - 1) * limit;
 
         const query = { model: req.params.modelId, isActive: true };
-        
+
         if (category) {
             query.category = { $regex: new RegExp(category, 'i') };
         }
@@ -197,7 +197,7 @@ exports.getProductsByModel = async (req, res) => {
         const products = await BikeProduct.find(query)
             .skip(skip)
             .limit(limit)
-            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -230,10 +230,10 @@ exports.getProductById = async (req, res) => {
         const { phoneNumber, currency } = req.query;
         const product = await BikeProduct.findOne({ _id: req.params.id, isActive: true });
         if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-        
+
         const productsWithWishlist = await addIsWishlistToProducts([product], phoneNumber);
         const productWithCurrency = await convertSingleProductPrice(productsWithWishlist[0], currency);
-        
+
         res.status(200).json({ success: true, data: productWithCurrency });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -267,7 +267,7 @@ exports.updateProduct = async (req, res) => {
             if (!Array.isArray(retainedImages)) {
                 retainedImages = retainedImages ? [retainedImages] : [];
             }
-            
+
             const deletedImages = updatedImages.filter(url => !retainedImages.includes(url));
             for (const url of deletedImages) {
                 await deleteFromS3(url);
@@ -286,12 +286,12 @@ exports.updateProduct = async (req, res) => {
             (isBikeSpecific !== undefined ? isBikeSpecific : true) :
             false;
 
-        const updateFields = { 
-            brand, model, isBikeSpecific: autoBikeSpecific, name, productCode, 
-            isNewArrival, isGarageFavorite, isComingSoon, shortDescription, 
-            longDescription, description, category, subCategory, categoryIcon, 
-            price, imageUrl, images: updatedImages, quantityAvailable, specifications, 
-            shippingAndReturn, isActive, priority 
+        const updateFields = {
+            brand, model, isBikeSpecific: autoBikeSpecific, name, productCode,
+            isNewArrival, isGarageFavorite, isComingSoon, shortDescription,
+            longDescription, description, category, subCategory, categoryIcon,
+            price, imageUrl, images: updatedImages, quantityAvailable, specifications,
+            shippingAndReturn, isActive, priority
         };
 
         // Remove undefined fields
@@ -315,9 +315,10 @@ exports.getProductsByCategory = async (req, res) => {
         const limit = parseInt(req.query.limit) || 1000;
         const skip = (page - 1) * limit;
 
-        const query = { 
+        const query = {
             category: { $regex: new RegExp(req.params.category, 'i') },
-            isActive: true 
+            isBikeSpecific: false,
+            isActive: true
         };
 
         const totalProducts = await BikeProduct.countDocuments(query);
@@ -325,7 +326,7 @@ exports.getProductsByCategory = async (req, res) => {
         const products = await BikeProduct.find(query)
             .skip(skip)
             .limit(limit)
-            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -360,10 +361,11 @@ exports.getProductsByCategoryAndSubCategory = async (req, res) => {
         const limit = parseInt(req.query.limit) || 1000;
         const skip = (page - 1) * limit;
 
-        const query = { 
+        const query = {
             category: { $regex: new RegExp(req.params.category, 'i') },
             subCategory: { $regex: new RegExp(req.params.subCategory, 'i') },
-            isActive: true 
+            isBikeSpecific: false,
+            isActive: true
         };
 
         const totalProducts = await BikeProduct.countDocuments(query);
@@ -371,7 +373,7 @@ exports.getProductsByCategoryAndSubCategory = async (req, res) => {
         const products = await BikeProduct.find(query)
             .skip(skip)
             .limit(limit)
-            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -409,10 +411,10 @@ exports.getAllProductsPaginated = async (req, res) => {
 
         const totalProducts = await BikeProduct.countDocuments({ isActive: true });
 
-        const products = await BikeProduct.find({ isActive: true })
+        const products = await BikeProduct.find({ isActive: true, isBikeSpecific: false })
             .skip(skip)
             .limit(limit)
-            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -444,13 +446,13 @@ exports.searchProducts = async (req, res) => {
     try {
         const { query, page = 1, limit = 1000, currency } = req.query;
         if (!query) {
-        return res.status(400).json({ success: false, message: 'Query parameter is required' });
+            return res.status(400).json({ success: false, message: 'Query parameter is required' });
         }
         const skip = (page - 1) * parseInt(limit);
 
         // Decode URL-encoded query to handle spaces (%20, + etc.)
         let decodedQuery = decodeURIComponent(query);
-        
+
         // Escape special regex characters and handle spaces
         const escapedQuery = decodedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, ' ').trim();
         const caseInsensitiveRegex = { $regex: escapedQuery, $options: 'i' };
@@ -477,7 +479,7 @@ exports.searchProducts = async (req, res) => {
             .select('name _id shortDescription price imageUrl category productCode quantityAvailable priority')
             .skip(skip)
             .limit(parseInt(limit))
-            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithCurrency = await convertProductPrices(products, currency);
         const totalPages = Math.ceil(totalCount / limit);
@@ -504,9 +506,9 @@ exports.searchProducts = async (req, res) => {
 exports.getCategoryCounts = async (req, res) => {
     try {
         const { currency } = req.query;
-        
+
         const categoriesData = await BikeProduct.aggregate([
-            { $match: { isActive: true } },
+            { $match: { isActive: true, isBikeSpecific: false } },
             {
                 $group: {
                     _id: '$category',
@@ -566,13 +568,13 @@ exports.getCategoryCountsByModel = async (req, res) => {
     try {
         const { modelId } = req.params;
         const { currency } = req.query;
-        
+
         const categoriesData = await BikeProduct.aggregate([
-            { 
-                $match: { 
+            {
+                $match: {
                     model: new mongoose.Types.ObjectId(modelId),
-                    isActive: true 
-                } 
+                    isActive: true
+                }
             },
             {
                 $group: {
@@ -633,11 +635,11 @@ exports.getGarageFavorites = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
         const products = await BikeProduct.find({ isGarageFavorite: true, isActive: true })
-            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
-        
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
+
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
-        
+
         res.status(200).json({ success: true, data: productsWithCurrency });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -648,11 +650,11 @@ exports.getNewArrivals = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
         const products = await BikeProduct.find({ isNewArrival: true, isActive: true })
-            .sort({ priority: -1, quantityAvailable: -1, createdAt: -1 });
-        
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
+
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
-        
+
         res.status(200).json({ success: true, data: productsWithCurrency });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -663,11 +665,12 @@ exports.getSubCategoryCountsByCategory = async (req, res) => {
     try {
         const { category } = req.params;
         const subCategoriesData = await BikeProduct.aggregate([
-            { 
-                $match: { 
+            {
+                $match: {
                     category: { $regex: new RegExp(category, 'i') },
-                    isActive: true 
-                } 
+                    isBikeSpecific: false,
+                    isActive: true
+                }
             },
             {
                 $group: {
@@ -700,12 +703,12 @@ exports.getSubCategoryCountsByCategoryAndModel = async (req, res) => {
     try {
         const { category, modelId } = req.params;
         const subCategoriesData = await BikeProduct.aggregate([
-            { 
-                $match: { 
+            {
+                $match: {
                     category: { $regex: new RegExp(category, 'i') },
                     model: new mongoose.Types.ObjectId(modelId),
-                    isActive: true 
-                } 
+                    isActive: true
+                }
             },
             {
                 $group: {
@@ -738,17 +741,17 @@ exports.deleteProduct = async (req, res) => {
     try {
         const product = await BikeProduct.findByIdAndDelete(req.params.id);
         if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-        
+
         if (product.imageUrl) {
             await deleteFromS3(product.imageUrl);
         }
-        
+
         if (product.images && product.images.length > 0) {
             for (const url of product.images) {
                 await deleteFromS3(url);
             }
         }
-        
+
         res.status(200).json({ success: true, data: { message: 'Product deleted successfully' } });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
