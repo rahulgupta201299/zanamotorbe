@@ -55,3 +55,51 @@ exports.updateCategory = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+exports.getUniqueCategories = async (req, res) => {
+    try {
+        const { typeOfCategory } = req.query;
+        let query = { isActive: true };
+
+        if (typeOfCategory) {
+            if (typeOfCategory === 'Bike Specific') {
+                query.typeOfCategory = { $in: ['Bike Specific', 'Both'] };
+            } else if (typeOfCategory === 'Universal') {
+                query.typeOfCategory = { $in: ['Universal', 'Both'] };
+            } else {
+                query.typeOfCategory = typeOfCategory;
+            }
+        }
+
+        const categories = await Category.distinct('category', query);
+        res.status(200).json({ success: true, data: categories });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getUniqueSubCategories = async (req, res) => {
+    try {
+        const { category, typeOfCategory } = req.query;
+        let query = { isActive: true };
+
+        if (category) {
+            query.category = category;
+        }
+
+        if (typeOfCategory) {
+            if (typeOfCategory === 'Bike Specific') {
+                query.typeOfCategory = { $in: ['Bike Specific', 'Both'] };
+            } else if (typeOfCategory === 'Universal') {
+                query.typeOfCategory = { $in: ['Universal', 'Both'] };
+            } else {
+                query.typeOfCategory = typeOfCategory;
+            }
+        }
+
+        const subcategories = await Category.distinct('subCategory', query);
+        res.status(200).json({ success: true, data: subcategories });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
