@@ -764,10 +764,18 @@ async function handlePaymentCaptured(paymentEntity) {
             // Reduce product quantity in inventory
             if (order.items && order.items.length > 0) {
                 for (const item of order.items) {
-                    await BikeProduct.findByIdAndUpdate(
-                        item.product,
-                        { $inc: { quantityAvailable: -item.quantity } }
-                    );
+                    const product = await BikeProduct.findById(item.product);
+                    if (product && product.productCode) {
+                        await BikeProduct.updateMany(
+                            { productCode: product.productCode },
+                            { $inc: { quantityAvailable: -item.quantity } }
+                        );
+                    } else {
+                        await BikeProduct.findByIdAndUpdate(
+                            item.product,
+                            { $inc: { quantityAvailable: -item.quantity } }
+                        );
+                    }
                 }
             }
 

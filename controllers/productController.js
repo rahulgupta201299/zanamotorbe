@@ -302,6 +302,17 @@ exports.updateProduct = async (req, res) => {
             updateFields,
             { new: true }
         );
+
+        // If quantity is updated, update all products with the same productCode
+        if (updateFields.quantityAvailable !== undefined) {
+            const currentProductCode = updateFields.productCode || existingProduct.productCode;
+            if (currentProductCode) {
+                await BikeProduct.updateMany(
+                    { productCode: currentProductCode, _id: { $ne: req.params.id } },
+                    { $set: { quantityAvailable: updateFields.quantityAvailable } }
+                );
+            }
+        }
         res.status(200).json({ success: true, data: product });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
