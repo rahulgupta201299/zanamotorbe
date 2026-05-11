@@ -302,6 +302,21 @@ exports.updateProduct = async (req, res) => {
             updateFields,
             { new: true }
         );
+
+        // If quantity or price is updated, update all products with the same productCode
+        if (updateFields.quantityAvailable !== undefined || updateFields.price !== undefined) {
+            const currentProductCode = updateFields.productCode || existingProduct.productCode;
+            if (currentProductCode) {
+                const syncUpdates = {};
+                if (updateFields.quantityAvailable !== undefined) syncUpdates.quantityAvailable = updateFields.quantityAvailable;
+                if (updateFields.price !== undefined) syncUpdates.price = updateFields.price;
+
+                await BikeProduct.updateMany(
+                    { productCode: currentProductCode, _id: { $ne: req.params.id } },
+                    { $set: syncUpdates }
+                );
+            }
+        }
         res.status(200).json({ success: true, data: product });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -444,7 +459,7 @@ exports.getAllProductsPaginated = async (req, res) => {
 
 exports.searchProducts = async (req, res) => {
     try {
-        const { query, page = 1, limit = 1000, currency } = req.query;
+        const { query, page = 1, limit = 1000, currency, all } = req.query;
         if (!query) {
             return res.status(400).json({ success: false, message: 'Query parameter is required' });
         }
@@ -457,21 +472,24 @@ exports.searchProducts = async (req, res) => {
         const escapedQuery = decodedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, ' ').trim();
         const caseInsensitiveRegex = { $regex: escapedQuery, $options: 'i' };
 
-        const matchingModels = await BikeModel.find({ name: caseInsensitiveRegex, isActive: true }).select('_id');
+        const modelQuery = { name: caseInsensitiveRegex };
+        if (all !== 'true') {
+            modelQuery.isActive = true;
+        }
+        const matchingModels = await BikeModel.find(modelQuery).select('_id');
         const modelIds = matchingModels.map(m => m._id);
 
         const searchQuery = {
-            $and: [
-                { isActive: true },
-                {
-                    $or: [
-                        { name: caseInsensitiveRegex },
-                        { productCode: caseInsensitiveRegex },
-                        { model: { $in: modelIds } }
-                    ]
-                }
+            $or: [
+                { name: caseInsensitiveRegex },
+                { productCode: caseInsensitiveRegex },
+                { model: { $in: modelIds } }
             ]
         };
+
+        if (all !== 'true') {
+            searchQuery.isActive = true;
+        }
 
         const totalCount = await BikeProduct.countDocuments(searchQuery);
 
