@@ -303,13 +303,17 @@ exports.updateProduct = async (req, res) => {
             { new: true }
         );
 
-        // If quantity is updated, update all products with the same productCode
-        if (updateFields.quantityAvailable !== undefined) {
+        // If quantity or price is updated, update all products with the same productCode
+        if (updateFields.quantityAvailable !== undefined || updateFields.price !== undefined) {
             const currentProductCode = updateFields.productCode || existingProduct.productCode;
             if (currentProductCode) {
+                const syncUpdates = {};
+                if (updateFields.quantityAvailable !== undefined) syncUpdates.quantityAvailable = updateFields.quantityAvailable;
+                if (updateFields.price !== undefined) syncUpdates.price = updateFields.price;
+
                 await BikeProduct.updateMany(
                     { productCode: currentProductCode, _id: { $ne: req.params.id } },
-                    { $set: { quantityAvailable: updateFields.quantityAvailable } }
+                    { $set: syncUpdates }
                 );
             }
         }
