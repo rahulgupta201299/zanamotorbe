@@ -17,4 +17,7 @@ router.post('/remove-coupon', cartController.removeCoupon);
 // Payment method
 router.post('/set-payment-method', cartController.setPaymentMethod);
 
+// Admin routes
+router.get('/admin/active', cartController.getAdminActiveCarts);
+
 module.exports = router;
