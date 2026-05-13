@@ -36,11 +36,11 @@ const convertCartPrices = async (cart, currency) => {
     if (!currency || currency === 'INR') {
         // For INR, still add currency info for consistency
         const cartObj = cart.toObject ? cart.toObject() : cart;
-        
+
         const convertedItems = cartObj.items.map((item) => {
             const itemObj = item.toObject ? item.toObject() : item;
             let convertedProduct = itemObj.product;
-            
+
             if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 convertedProduct = {
@@ -80,11 +80,11 @@ const convertCartPrices = async (cart, currency) => {
     if (!validCurrency) {
         // Return with INR info if currency is invalid
         const cartObj = cart.toObject ? cart.toObject() : cart;
-        
+
         const convertedItems = cartObj.items.map((item) => {
             const itemObj = item.toObject ? item.toObject() : item;
             let convertedProduct = itemObj.product;
-            
+
             if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 convertedProduct = {
@@ -116,7 +116,7 @@ const convertCartPrices = async (cart, currency) => {
             const itemObj = item.toObject ? item.toObject() : item;
             const originalPrice = itemObj.price;
             const originalTotalPrice = itemObj.totalPrice;
-            
+
             const convertedPrice = await getConvertedPrice(originalPrice, currency);
             const convertedTotalPrice = await getConvertedPrice(originalTotalPrice, currency);
 
@@ -126,7 +126,7 @@ const convertCartPrices = async (cart, currency) => {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 const productOriginalPrice = productObj.price;
                 const productConvertedPrice = await getConvertedPrice(productOriginalPrice, currency);
-                
+
                 convertedProduct = {
                     ...productObj,
                     price: productConvertedPrice,
@@ -185,7 +185,7 @@ const convertValidationResults = async (results, currency) => {
         // For INR, still add currency info for consistency
         const convertedResults = results.map((result) => {
             let convertedProduct = result.product;
-            
+
             if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 convertedProduct = {
@@ -212,7 +212,7 @@ const convertValidationResults = async (results, currency) => {
         // Return with INR info if currency is invalid
         const convertedResults = results.map((result) => {
             let convertedProduct = result.product;
-            
+
             if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 convertedProduct = {
@@ -236,12 +236,12 @@ const convertValidationResults = async (results, currency) => {
         results.map(async (result) => {
             const convertedPrice = await getConvertedPrice(result.price, currency);
             let convertedProduct = result.product;
-            
+
             if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 const productOriginalPrice = productObj.price;
                 const productConvertedPrice = await getConvertedPrice(productOriginalPrice, currency);
-                
+
                 convertedProduct = {
                     ...productObj,
                     price: productConvertedPrice,
@@ -314,22 +314,22 @@ exports.validateCart = async (req, res) => {
         const { items, currency } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Items array is required and cannot be empty' 
+            return res.status(400).json({
+                success: false,
+                message: 'Items array is required and cannot be empty'
             });
         }
 
         const validationResults = await validateProductAvailability(items);
-        
+
         // Convert prices based on currency
         const convertedResults = await convertValidationResults(validationResults, currency);
-        
+
         const allValid = convertedResults.every(result => result.isValid);
         const invalidItems = convertedResults.filter(result => !result.isValid);
 
-        res.status(200).json({ 
-            success: true, 
+        res.status(200).json({
+            success: true,
             data: {
                 isValid: allValid,
                 items: convertedResults,
@@ -380,17 +380,17 @@ exports.manageCartItem = async (req, res) => {
         const { phoneNumber, items, currency } = req.body;
 
         if (!phoneNumber) {
-        return res.status(400).json({
-            success: false,
-            message: 'phoneNumber is required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber is required'
+            });
         }
 
         if (!items || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({
-            success: false,
-            message: 'items array is required and cannot be empty'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'items array is required and cannot be empty'
+            });
         }
 
         let cart = await getOrCreateCart(phoneNumber);
@@ -507,18 +507,18 @@ exports.manageCartItem = async (req, res) => {
         // Handle coupon validation and recalculation if coupon is already applied
         let couponRemoved = false;
         let couponRemovedMessage = '';
-        
+
         if (cart.appliedCoupon && cart.items.length > 0) {
             // Calculate new subtotal
             const newSubtotal = cart.items.reduce((total, item) => total + item.totalPrice, 0);
-            
+
             // Get the applied coupon details
             const coupon = await Coupon.findById(cart.appliedCoupon);
-            
+
             if (coupon) {
                 // Re-validate coupon eligibility with new subtotal
                 const eligibility = await validateCouponEligibility(coupon, phoneNumber, newSubtotal);
-                
+
                 if (!eligibility.isValid) {
                     // Coupon is no longer applicable, remove it
                     couponRemoved = true;
@@ -609,18 +609,18 @@ exports.clearCart = async (req, res) => {
         const { phoneNumber } = req.body;
 
         if (!phoneNumber) {
-        return res.status(400).json({
-            success: false,
-            message: 'phoneNumber is required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber is required'
+            });
         }
 
         const cart = await Cart.findOne({ phoneNumber, status: 'active' });
         if (!cart) {
-        return res.status(404).json({
-            success: false,
-            message: 'Active cart not found'
-        });
+            return res.status(404).json({
+                success: false,
+                message: 'Active cart not found'
+            });
         }
 
         // Delete the cart since it's being cleared (becomes empty)
@@ -650,18 +650,18 @@ exports.updateCartAddresses = async (req, res) => {
         const { phoneNumber, shippingAddress, billingAddress, emailId, shippingAddressSameAsBillingAddress } = req.body;
 
         if (!phoneNumber) {
-        return res.status(400).json({
-            success: false,
-            message: 'phoneNumber is required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber is required'
+            });
         }
 
         const cart = await Cart.findOne({ phoneNumber, status: 'active' });
         if (!cart) {
-        return res.status(404).json({
-            success: false,
-            message: 'Active cart not found'
-        });
+            return res.status(404).json({
+                success: false,
+                message: 'Active cart not found'
+            });
         }
 
         if (shippingAddress) cart.shippingAddress = shippingAddress;
@@ -752,32 +752,32 @@ exports.applyCoupon = async (req, res) => {
         const { phoneNumber, couponCode, currency } = req.body;
 
         if (!phoneNumber) {
-        return res.status(400).json({
-            success: false,
-            message: 'phoneNumber is required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber is required'
+            });
         }
 
         if (!couponCode) {
-        return res.status(400).json({
-            success: false,
-            message: 'couponCode is required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'couponCode is required'
+            });
         }
 
         const cart = await Cart.findOne({ phoneNumber, status: 'active' });
         if (!cart) {
-        return res.status(404).json({
-            success: false,
-            message: 'Active cart not found'
-        });
+            return res.status(404).json({
+                success: false,
+                message: 'Active cart not found'
+            });
         }
 
         if (cart.items.length === 0) {
-        return res.status(400).json({
-            success: false,
-            message: 'Cart is empty'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'Cart is empty'
+            });
         }
 
         // Find coupon
@@ -787,10 +787,10 @@ exports.applyCoupon = async (req, res) => {
         });
 
         if (!coupon) {
-        return res.status(404).json({
-            success: false,
-            message: 'Invalid coupon code'
-        });
+            return res.status(404).json({
+                success: false,
+                message: 'Invalid coupon code'
+            });
         }
 
         // Calculate current subtotal
@@ -825,7 +825,7 @@ exports.applyCoupon = async (req, res) => {
         // Convert prices based on currency (only convert if currency is not INR)
         const shouldConvert = currency && currency !== 'INR';
         const validCurrency = shouldConvert ? currencyList.find(c => c.code === currency) : null;
-        
+
         const responseData = {
             couponCode: coupon.code,
             couponType: coupon.type,
@@ -855,25 +855,25 @@ exports.removeCoupon = async (req, res) => {
         const { phoneNumber, currency } = req.body;
 
         if (!phoneNumber) {
-        return res.status(400).json({
-            success: false,
-            message: 'phoneNumber is required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber is required'
+            });
         }
 
         const cart = await Cart.findOne({ phoneNumber, status: 'active' });
         if (!cart) {
-        return res.status(404).json({
-            success: false,
-            message: 'Active cart not found'
-        });
+            return res.status(404).json({
+                success: false,
+                message: 'Active cart not found'
+            });
         }
 
         if (!cart.appliedCoupon) {
-        return res.status(400).json({
-            success: false,
-            message: 'No coupon applied to cart'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'No coupon applied to cart'
+            });
         }
 
         // Remove coupon
@@ -966,6 +966,83 @@ exports.setPaymentMethod = async (req, res) => {
             }
         });
 
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Get all active carts for admin with filtering and pagination
+exports.getAdminActiveCarts = async (req, res) => {
+    try {
+        const { minAmount, maxAmount, startDate, endDate, sortBy = 'updatedAt', sortOrder = 'desc', page = 1, limit = 10 } = req.query;
+
+        // Validate sortBy field
+        const allowedSortFields = ['totalAmount', 'updatedAt'];
+        if (sortBy && !allowedSortFields.includes(sortBy)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid sortBy field. Allowed fields: ${allowedSortFields.join(', ')}`
+            });
+        }
+
+        // Validate sortOrder
+        if (sortOrder && !['asc', 'desc'].includes(sortOrder.toLowerCase())) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid sortOrder. Use "asc" or "desc"'
+            });
+        }
+
+        const query = { status: 'active' };
+
+        if (minAmount || maxAmount) {
+            query.totalAmount = {};
+            if (minAmount) query.totalAmount.$gte = parseFloat(minAmount);
+            if (maxAmount) query.totalAmount.$lte = parseFloat(maxAmount);
+        }
+
+        if (startDate || endDate) {
+            query.updatedAt = {};
+            if (startDate) query.updatedAt.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.updatedAt.$lte = end;
+            }
+        }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const sort = {};
+        sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+        const totalCarts = await Cart.countDocuments(query);
+        const carts = await Cart.find(query)
+            .populate('items.product')
+            .sort(sort)
+            .skip(skip)
+            .limit(parseInt(limit));
+
+        // Map carts to object if needed (convertCartPrices was doing this plus conversion)
+        // Since we removed currency, we just return the carts as is or populate them.
+        const cartData = carts.map(cart => cart.toObject ? cart.toObject() : cart);
+
+        const totalPages = Math.ceil(totalCarts / limit);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                carts: cartData,
+                pagination: {
+                    totalCarts,
+                    totalPages,
+                    currentPage: parseInt(page),
+                    limit: parseInt(limit),
+                    hasNextPage: parseInt(page) < totalPages,
+                    hasPrevPage: parseInt(page) > 1
+                }
+            }
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
