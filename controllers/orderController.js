@@ -196,6 +196,98 @@ exports.getAdminAllOrders = async (req, res) => {
     }
 };
 
+// Get order statistics for admin (count and total amount grouped by payment method and status)
+exports.getAdminOrderStats = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+
+        const query = {};
+
+        // Date filters
+        if (startDate || endDate) {
+            query.orderDate = {};
+            if (startDate) query.orderDate.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.orderDate.$lte = end;
+            }
+        }
+
+        const stats = await Order.aggregate([
+            { $match: query },
+            {
+                $group: {
+                    _id: null,
+                    onlineCount: {
+                        $sum: {
+                            $cond: [
+                                { $and: [ { $ne: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "paid"] } ] },
+                                1,
+                                0
+                            ]
+                        }
+                    },
+                    onlineTotalAmount: {
+                        $sum: {
+                            $cond: [
+                                { $and: [ { $ne: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "paid"] } ] },
+                                "$totalAmount",
+                                0
+                            ]
+                        }
+                    },
+                    codCount: {
+                        $sum: {
+                            $cond: [
+                                { $and: [ { $eq: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "partial_paid"] } ] },
+                                1,
+                                0
+                            ]
+                        }
+                    },
+                    codTotalAmount: {
+                        $sum: {
+                            $cond: [
+                                { $and: [ { $eq: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "partial_paid"] } ] },
+                                "$totalAmount",
+                                0
+                            ]
+                        }
+                    }
+                }
+            }
+        ]);
+
+        const result = stats.length > 0 ? stats[0] : {
+            onlineCount: 0,
+            onlineTotalAmount: 0,
+            codCount: 0,
+            codTotalAmount: 0
+        };
+
+        res.status(200).json({
+            success: true,
+            data: {
+                online: {
+                    count: result.onlineCount,
+                    totalAmount: result.onlineTotalAmount
+                },
+                cod: {
+                    count: result.codCount,
+                    totalAmount: result.codTotalAmount
+                },
+                overall: {
+                    count: result.onlineCount + result.codCount,
+                    totalAmount: result.onlineTotalAmount + result.codTotalAmount
+                }
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 exports.trackOrderByOrderId = async (req, res) => {
     try {
         const { orderId } = req.params;
