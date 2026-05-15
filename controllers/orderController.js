@@ -113,6 +113,89 @@ exports.getOrderById = async (req, res) => {
     }
 };
 
+// Get all orders for admin with filtering, sorting and pagination
+exports.getAdminAllOrders = async (req, res) => {
+    try {
+        const { minAmount, maxAmount, startDate, endDate, paymentMethod, paymentStatus, sortBy = 'orderDate', sortOrder = 'desc', page = 1, limit = 10 } = req.query;
+
+        // Validate sortBy field
+        const allowedSortFields = ['totalAmount', 'updatedAt', 'orderDate'];
+        if (sortBy && !allowedSortFields.includes(sortBy)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid sortBy field. Allowed fields: ${allowedSortFields.join(', ')}`
+            });
+        }
+
+        // Validate sortOrder
+        if (sortOrder && !['asc', 'desc'].includes(sortOrder.toLowerCase())) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid sortOrder. Use "asc" or "desc"'
+            });
+        }
+
+        const query = {};
+
+        // Amount filters
+        if (minAmount || maxAmount) {
+            query.totalAmount = {};
+            if (minAmount) query.totalAmount.$gte = parseFloat(minAmount);
+            if (maxAmount) query.totalAmount.$lte = parseFloat(maxAmount);
+        }
+
+        // Date filters
+        if (startDate || endDate) {
+            query.orderDate = {}; // Using orderDate for orders by default
+            if (startDate) query.orderDate.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.orderDate.$lte = end;
+            }
+        }
+
+        // Additional filters
+        if (paymentMethod) {
+            query.paymentMethod = paymentMethod;
+        }
+
+        if (paymentStatus) {
+            query.paymentStatus = paymentStatus;
+        }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const sort = {};
+        sort[sortBy] = sortOrder.toLowerCase() === 'asc' ? 1 : -1;
+
+        const totalOrders = await Order.countDocuments(query);
+        const orders = await Order.find(query)
+            .populate('items.product')
+            .sort(sort)
+            .skip(skip)
+            .limit(parseInt(limit));
+
+        const totalPages = Math.ceil(totalOrders / limit);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                orders,
+                pagination: {
+                    totalOrders,
+                    totalPages,
+                    currentPage: parseInt(page),
+                    limit: parseInt(limit),
+                    hasNextPage: parseInt(page) < totalPages,
+                    hasPrevPage: parseInt(page) > 1
+                }
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 exports.trackOrderByOrderId = async (req, res) => {
     try {
         const { orderId } = req.params;
