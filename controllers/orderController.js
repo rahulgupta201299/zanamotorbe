@@ -144,15 +144,11 @@ exports.getAdminAllOrders = async (req, res) => {
             if (maxAmount) query.totalAmount.$lte = parseFloat(maxAmount);
         }
 
-        // Date filters
+        // Date filters (handling IST offset +5:30)
         if (startDate || endDate) {
             query.orderDate = {}; // Using orderDate for orders by default
-            if (startDate) query.orderDate.$gte = new Date(startDate);
-            if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                query.orderDate.$lte = end;
-            }
+            if (startDate) query.orderDate.$gte = new Date(`${startDate}T00:00:00+05:30`);
+            if (endDate) query.orderDate.$lte = new Date(`${endDate}T23:59:59.999+05:30`);
         }
 
         // Additional filters
@@ -203,15 +199,11 @@ exports.getAdminOrderStats = async (req, res) => {
 
         const query = {};
 
-        // Date filters
+        // Date filters (handling IST offset +5:30)
         if (startDate || endDate) {
             query.orderDate = {};
-            if (startDate) query.orderDate.$gte = new Date(startDate);
-            if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                query.orderDate.$lte = end;
-            }
+            if (startDate) query.orderDate.$gte = new Date(`${startDate}T00:00:00+05:30`);
+            if (endDate) query.orderDate.$lte = new Date(`${endDate}T23:59:59.999+05:30`);
         }
 
         const stats = await Order.aggregate([
