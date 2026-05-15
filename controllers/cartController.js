@@ -1001,14 +1001,11 @@ exports.getAdminActiveCarts = async (req, res) => {
             if (maxAmount) query.totalAmount.$lte = parseFloat(maxAmount);
         }
 
+        // Date filters (handling IST offset +5:30)
         if (startDate || endDate) {
             query.updatedAt = {};
-            if (startDate) query.updatedAt.$gte = new Date(startDate);
-            if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                query.updatedAt.$lte = end;
-            }
+            if (startDate) query.updatedAt.$gte = new Date(`${startDate}T00:00:00+05:30`);
+            if (endDate) query.updatedAt.$lte = new Date(`${endDate}T23:59:59.999+05:30`);
         }
 
         const skip = (parseInt(page) - 1) * parseInt(limit);
