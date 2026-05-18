@@ -974,7 +974,7 @@ exports.setPaymentMethod = async (req, res) => {
 // Get all active carts for admin with filtering and pagination
 exports.getAdminActiveCarts = async (req, res) => {
     try {
-        const { minAmount, maxAmount, startDate, endDate, sortBy = 'updatedAt', sortOrder = 'desc', page = 1, limit = 10 } = req.query;
+        const { minAmount, maxAmount, startDate, endDate, phoneNumber, emailId, sortBy = 'updatedAt', sortOrder = 'desc', page = 1, limit = 10 } = req.query;
 
         // Validate sortBy field
         const allowedSortFields = ['totalAmount', 'updatedAt'];
@@ -1006,6 +1006,15 @@ exports.getAdminActiveCarts = async (req, res) => {
             query.updatedAt = {};
             if (startDate) query.updatedAt.$gte = new Date(`${startDate}T00:00:00+05:30`);
             if (endDate) query.updatedAt.$lte = new Date(`${endDate}T23:59:59.999+05:30`);
+        }
+
+        // Additional filters
+        if (phoneNumber) {
+            query.phoneNumber = phoneNumber;
+        }
+
+        if (emailId) {
+            query.emailId = emailId;
         }
 
         const skip = (parseInt(page) - 1) * parseInt(limit);

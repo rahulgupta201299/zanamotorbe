@@ -116,7 +116,7 @@ exports.getOrderById = async (req, res) => {
 // Get all orders for admin with filtering, sorting and pagination
 exports.getAdminAllOrders = async (req, res) => {
     try {
-        const { minAmount, maxAmount, startDate, endDate, paymentMethod, sortBy = 'orderDate', sortOrder = 'desc', page = 1, limit = 10 } = req.query;
+        const { minAmount, maxAmount, startDate, endDate, paymentMethod, phoneNumber, emailId, sortBy = 'orderDate', sortOrder = 'desc', page = 1, limit = 10 } = req.query;
 
         // Validate sortBy field
         const allowedSortFields = ['totalAmount', 'updatedAt', 'orderDate'];
@@ -149,6 +149,15 @@ exports.getAdminAllOrders = async (req, res) => {
             query.orderDate = {}; // Using orderDate for orders by default
             if (startDate) query.orderDate.$gte = new Date(`${startDate}T00:00:00+05:30`);
             if (endDate) query.orderDate.$lte = new Date(`${endDate}T23:59:59.999+05:30`);
+        }
+
+        // Additional filters
+        if (phoneNumber) {
+            query.phoneNumber = phoneNumber;
+        }
+
+        if (emailId) {
+            query.emailId = emailId;
         }
 
         // Scoped filters (only return online paid and COD partial paid orders)
