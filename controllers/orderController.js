@@ -116,7 +116,7 @@ exports.getOrderById = async (req, res) => {
 // Get all orders for admin with filtering, sorting and pagination
 exports.getAdminAllOrders = async (req, res) => {
     try {
-        const { minAmount, maxAmount, startDate, endDate, paymentMethod, paymentStatus, sortBy = 'orderDate', sortOrder = 'desc', page = 1, limit = 10 } = req.query;
+        const { minAmount, maxAmount, startDate, endDate, paymentMethod, sortBy = 'orderDate', sortOrder = 'desc', page = 1, limit = 10 } = req.query;
 
         // Validate sortBy field
         const allowedSortFields = ['totalAmount', 'updatedAt', 'orderDate'];
@@ -151,13 +151,41 @@ exports.getAdminAllOrders = async (req, res) => {
             if (endDate) query.orderDate.$lte = new Date(`${endDate}T23:59:59.999+05:30`);
         }
 
-        // Additional filters
+        // Scoped filters (only return online paid and COD partial paid orders)
+        const conditions = [];
+
+        // Track if online paid / cod partial orders are allowed by request filters
+        let allowOnlinePaid = true;
+        let allowCodPartial = true;
+
         if (paymentMethod) {
-            query.paymentMethod = paymentMethod;
+            if (paymentMethod === 'cod') {
+                allowOnlinePaid = false;
+            } else {
+                allowCodPartial = false;
+            }
         }
 
-        if (paymentStatus) {
-            query.paymentStatus = paymentStatus;
+        if (allowOnlinePaid) {
+            const cond = { paymentStatus: 'paid' };
+            if (paymentMethod) {
+                cond.paymentMethod = paymentMethod;
+            } else {
+                cond.paymentMethod = { $ne: 'cod' };
+            }
+            conditions.push(cond);
+        }
+
+        if (allowCodPartial) {
+            conditions.push({ paymentMethod: 'cod', paymentStatus: 'partial_paid' });
+        }
+
+        if (conditions.length === 0) {
+            query._id = null; // Force 0 matches if filters are mutually exclusive with our scoped criteria
+        } else if (conditions.length === 1) {
+            Object.assign(query, conditions[0]);
+        } else {
+            query.$or = conditions;
         }
 
         const skip = (parseInt(page) - 1) * parseInt(limit);
