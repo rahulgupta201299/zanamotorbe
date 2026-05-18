@@ -104,7 +104,18 @@ const cartSchema = new mongoose.Schema({
         default: 0
     },
     // Payment-related fields (set before checkout)
+    orderId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Order',
+        default: null
+    },
     razorpayOrderId: {
+        type: String
+    },
+    paymentLinkId: {
+        type: String
+    },
+    paymentShortUrl: {
         type: String
     },
     paymentMethod: {

@@ -5,6 +5,7 @@ const paymentController = require('../controllers/paymentController');
 // Online payment (Razorpay)
 router.post('/create-order', paymentController.createOrder);
 router.post('/verify', paymentController.verifyPayment);
+router.post('/create-payment-link', paymentController.createPaymentLink);
 
 // COD (Cash on Delivery)
 router.post('/create-cod-order', paymentController.createCODOrder);
