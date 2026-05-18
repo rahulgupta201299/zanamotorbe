@@ -1053,3 +1053,122 @@ exports.getAdminActiveCarts = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// Download active carts as CSV
+exports.downloadAdminActiveCartsCsv = async (req, res) => {
+    try {
+        const { minAmount, maxAmount, startDate, endDate, phoneNumber, emailId, sortBy = 'updatedAt', sortOrder = 'desc' } = req.query;
+
+        // Same query construction as getAdminActiveCarts
+        const query = { status: 'active' };
+
+        if (minAmount || maxAmount) {
+            query.totalAmount = {};
+            if (minAmount) query.totalAmount.$gte = parseFloat(minAmount);
+            if (maxAmount) query.totalAmount.$lte = parseFloat(maxAmount);
+        }
+
+        // Date filters (handling IST offset +5:30)
+        if (startDate || endDate) {
+            query.updatedAt = {};
+            if (startDate) query.updatedAt.$gte = new Date(`${startDate}T00:00:00+05:30`);
+            if (endDate) query.updatedAt.$lte = new Date(`${endDate}T23:59:59.999+05:30`);
+        }
+
+        // Additional filters
+        if (phoneNumber) {
+            query.phoneNumber = phoneNumber;
+        }
+
+        if (emailId) {
+            query.emailId = emailId;
+        }
+
+        const sort = {};
+        sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+        const carts = await Cart.find(query)
+            .populate('items.product')
+            .sort(sort);
+
+        // Build CSV content
+        const headers = [
+            'Cart ID',
+            'Phone Number',
+            'Email ID',
+            'Product Codes',
+            'Product Names',
+            'Quantities',
+            'Unit Prices',
+            'Subtotal',
+            'Discount Amount',
+            'COD Charges',
+            'Total Amount',
+            'Coupon Code',
+            'Razorpay Order ID',
+            'Shipping Address',
+            'Billing Address',
+            'Created At',
+            'Updated At'
+        ];
+
+        const escapeCSV = (val) => {
+            if (val === null || val === undefined) return '';
+            let str = String(val);
+            if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+                return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+        };
+
+        const formatAddress = (addr) => {
+            if (!addr) return '';
+            const parts = [
+                addr.fullName,
+                addr.phone ? `Phone: ${addr.phone}` : '',
+                addr.addressLine1,
+                addr.addressLine2,
+                addr.city,
+                addr.state,
+                addr.postalCode,
+                addr.country
+            ].filter(Boolean);
+            return parts.join(', ');
+        };
+
+        const rows = carts.map(cart => {
+            const productCodes = cart.items.map(item => item.product ? item.product.productCode || 'N/A' : 'N/A').join(' | ');
+            const productNames = cart.items.map(item => item.product ? item.product.name : 'Unknown Product').join(' | ');
+            const quantities = cart.items.map(item => item.quantity).join(' | ');
+            const unitPrices = cart.items.map(item => item.price).join(' | ');
+
+            return [
+                cart._id,
+                cart.phoneNumber,
+                cart.emailId || '',
+                productCodes,
+                productNames,
+                quantities,
+                unitPrices,
+                cart.subtotal,
+                cart.discountAmount,
+                cart.codCharges || 0,
+                cart.totalAmount,
+                cart.couponCode || '',
+                cart.razorpayOrderId || '',
+                formatAddress(cart.shippingAddress),
+                formatAddress(cart.billingAddress),
+                cart.createdAt.toISOString(),
+                cart.updatedAt.toISOString()
+            ].map(escapeCSV).join(',');
+        });
+
+        const csvContent = [headers.join(','), ...rows].join('\n');
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="active_carts.csv"');
+        res.status(200).send(csvContent);
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

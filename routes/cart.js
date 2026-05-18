@@ -19,5 +19,6 @@ router.post('/set-payment-method', cartController.setPaymentMethod);
 
 // Admin routes
 router.get('/admin/active', cartController.getAdminActiveCarts);
+router.get('/admin/active/download', cartController.downloadAdminActiveCartsCsv);
 
 module.exports = router;

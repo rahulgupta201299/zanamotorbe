@@ -368,3 +368,167 @@ exports.trackOrderByOrderId = async (req, res) => {
         });
     }
 };
+
+// Download all orders as CSV
+exports.downloadAdminAllOrdersCsv = async (req, res) => {
+    try {
+        const { minAmount, maxAmount, startDate, endDate, paymentMethod, phoneNumber, emailId, sortBy = 'orderDate', sortOrder = 'desc' } = req.query;
+
+        const query = {};
+
+        // Amount filters
+        if (minAmount || maxAmount) {
+            query.totalAmount = {};
+            if (minAmount) query.totalAmount.$gte = parseFloat(minAmount);
+            if (maxAmount) query.totalAmount.$lte = parseFloat(maxAmount);
+        }
+
+        // Date filters (handling IST offset +5:30)
+        if (startDate || endDate) {
+            query.orderDate = {}; // Using orderDate for orders by default
+            if (startDate) query.orderDate.$gte = new Date(`${startDate}T00:00:00+05:30`);
+            if (endDate) query.orderDate.$lte = new Date(`${endDate}T23:59:59.999+05:30`);
+        }
+
+        // Additional filters
+        if (phoneNumber) {
+            query.phoneNumber = phoneNumber;
+        }
+
+        if (emailId) {
+            query.emailId = emailId;
+        }
+
+        // Scoped filters (only return online paid and COD partial paid orders)
+        const conditions = [];
+
+        // Track if online paid / cod partial orders are allowed by request filters
+        let allowOnlinePaid = true;
+        let allowCodPartial = true;
+
+        if (paymentMethod) {
+            if (paymentMethod === 'cod') {
+                allowOnlinePaid = false;
+            } else {
+                allowCodPartial = false;
+            }
+        }
+
+        if (allowOnlinePaid) {
+            const cond = { paymentStatus: 'paid' };
+            if (paymentMethod) {
+                cond.paymentMethod = paymentMethod;
+            } else {
+                cond.paymentMethod = { $ne: 'cod' };
+            }
+            conditions.push(cond);
+        }
+
+        if (allowCodPartial) {
+            conditions.push({ paymentMethod: 'cod', paymentStatus: 'partial_paid' });
+        }
+
+        if (conditions.length === 0) {
+            query._id = null; // Force 0 matches if filters are mutually exclusive with our scoped criteria
+        } else if (conditions.length === 1) {
+            Object.assign(query, conditions[0]);
+        } else {
+            query.$or = conditions;
+        }
+
+        const sort = {};
+        sort[sortBy] = sortOrder.toLowerCase() === 'asc' ? 1 : -1;
+
+        const orders = await Order.find(query)
+            .populate('items.product')
+            .sort(sort);
+
+        // Build CSV content
+        const headers = [
+            'Order Number',
+            'Phone Number',
+            'Email ID',
+            'Product Codes',
+            'Product Names',
+            'Quantities',
+            'Unit Prices',
+            'Subtotal',
+            'Discount Amount',
+            'COD Charges',
+            'Advance Paid',
+            'Total Amount',
+            'Payment Method',
+            'Payment Status',
+            'Order Status',
+            'Coupon Code',
+            'Razorpay Order ID',
+            'Razorpay Payment ID',
+            'Shipping Address',
+            'Billing Address',
+            'Order Date'
+        ];
+
+        const escapeCSV = (val) => {
+            if (val === null || val === undefined) return '';
+            let str = String(val);
+            if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+                return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+        };
+
+        const formatAddress = (addr) => {
+            if (!addr) return '';
+            const parts = [
+                addr.fullName,
+                addr.phone ? `Phone: ${addr.phone}` : '',
+                addr.addressLine1,
+                addr.addressLine2,
+                addr.city,
+                addr.state,
+                addr.postalCode,
+                addr.country
+            ].filter(Boolean);
+            return parts.join(', ');
+        };
+
+        const rows = orders.map(order => {
+            const productCodes = order.items.map(item => item.product ? item.product.productCode || 'N/A' : 'N/A').join(' | ');
+            const productNames = order.items.map(item => item.product ? item.product.name : 'Unknown Product').join(' | ');
+            const quantities = order.items.map(item => item.quantity).join(' | ');
+            const unitPrices = order.items.map(item => item.price).join(' | ');
+
+            return [
+                order.orderNumber,
+                order.phoneNumber,
+                order.emailId || '',
+                productCodes,
+                productNames,
+                quantities,
+                unitPrices,
+                order.subtotal,
+                order.discountAmount,
+                order.codCharges || 0,
+                order.advancePaid || 0,
+                order.totalAmount,
+                order.paymentMethod,
+                order.paymentStatus,
+                order.orderStatus,
+                order.couponCode || '',
+                order.razorpayOrderId || '',
+                order.razorpayPaymentId || '',
+                formatAddress(order.shippingAddress),
+                formatAddress(order.billingAddress),
+                order.orderDate.toISOString()
+            ].map(escapeCSV).join(',');
+        });
+
+        const csvContent = [headers.join(','), ...rows].join('\n');
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="orders.csv"');
+        res.status(200).send(csvContent);
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
