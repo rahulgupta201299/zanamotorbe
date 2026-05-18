@@ -95,6 +95,17 @@ exports.createCODOrder = async (req, res) => {
             orderStatus: 'pending'
         });
 
+        // Cancel previous payment link if one was already generated to prevent duplicate payments on old links
+        const previousPaymentLinkId = (order && order.paymentLinkId) || cart.paymentLinkId;
+        if (previousPaymentLinkId) {
+            try {
+                console.log(`Cancelling previous Razorpay payment link from createCODOrder: ${previousPaymentLinkId}`);
+                await razorpay.paymentLink.cancel(previousPaymentLinkId);
+            } catch (cancelError) {
+                console.log(`Failed to cancel previous payment link ${previousPaymentLinkId} from createCODOrder:`, cancelError.message);
+            }
+        }
+
         const newOrderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
         const finalOrderNumber = order ? order.orderNumber : newOrderNumber;
 
@@ -114,6 +125,8 @@ exports.createCODOrder = async (req, res) => {
             order.currencySymbol = currencySymbol;
             order.paymentMethod = 'cod';
             order.advancePaid = advanceAmount;
+            order.paymentLinkId = null;
+            order.paymentShortUrl = null;
             order.orderDate = new Date();
         } else {
             order = new Order({
@@ -179,6 +192,8 @@ exports.createCODOrder = async (req, res) => {
         // Update cart with order reference but KEEP it active
         cart.orderId = order._id;
         cart.razorpayOrderId = razorpayOrder.id;
+        cart.paymentLinkId = null;
+        cart.paymentShortUrl = null;
         cart.paymentStatus = 'pending';
         await cart.save();
 
@@ -454,6 +469,17 @@ exports.createOrder = async (req, res) => {
             orderStatus: 'pending'
         });
 
+        // Cancel previous payment link if one was already generated to prevent duplicate payments on old links
+        const previousPaymentLinkId = (order && order.paymentLinkId) || cart.paymentLinkId;
+        if (previousPaymentLinkId) {
+            try {
+                console.log(`Cancelling previous Razorpay payment link from createOrder: ${previousPaymentLinkId}`);
+                await razorpay.paymentLink.cancel(previousPaymentLinkId);
+            } catch (cancelError) {
+                console.log(`Failed to cancel previous payment link ${previousPaymentLinkId} from createOrder:`, cancelError.message);
+            }
+        }
+
         const orderNumber = order ? order.orderNumber : `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
         // Prepare order items with product details
@@ -483,6 +509,8 @@ exports.createOrder = async (req, res) => {
             order.paymentMethod = 'online'; // Ensure paymentMethod is updated to online
             order.currency = validCurrency ? currency : 'INR';
             order.currencySymbol = currencySymbol;
+            order.paymentLinkId = null;
+            order.paymentShortUrl = null;
             order.orderDate = new Date(); // Update date to reflect latest attempt
 
             // Note: razorpayOrderId might need to be recreated if amount changed
@@ -549,6 +577,8 @@ exports.createOrder = async (req, res) => {
         // Update cart with order reference but KEEP it active
         cart.orderId = order._id;
         cart.razorpayOrderId = razorpayOrder.id;
+        cart.paymentLinkId = null;
+        cart.paymentShortUrl = null;
         cart.paymentStatus = 'pending';
         // cart.status remains 'active' to allow user to return to cart
         await cart.save();
@@ -751,6 +781,29 @@ async function handlePaymentCaptured(paymentEntity) {
         }
 
         if (order) {
+            // Validate payment amount (in paise) against expected order amount
+            const paidAmountPaisa = paymentEntity.amount;
+            let expectedAmountPaisa = 0;
+
+            if (order.paymentMethod === 'cod') {
+                expectedAmountPaisa = Math.round(order.advancePaid * 100);
+            } else {
+                expectedAmountPaisa = Math.round(order.totalAmount * 100);
+            }
+
+            if (paidAmountPaisa !== expectedAmountPaisa) {
+                console.log(`CRITICAL: Payment amount mismatch for order ${order.orderNumber}. Expected: ${expectedAmountPaisa} paise, Paid: ${paidAmountPaisa} paise. Aborting webhook processing.`);
+                
+                order.paymentStatus = 'amount_mismatch';
+                order.statusHistory.push({
+                    status: 'pending',
+                    timestamp: new Date(),
+                    notes: `Payment capture failed: paid amount ${paidAmountPaisa / 100} does not match expected amount ${expectedAmountPaisa / 100}`
+                });
+                await order.save();
+                return;
+            }
+
             if (order.paymentMethod === 'cod') {
                 order.paymentStatus = 'partial_paid';
                 order.statusHistory.push({
