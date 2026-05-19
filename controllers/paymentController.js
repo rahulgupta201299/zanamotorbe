@@ -793,7 +793,7 @@ async function handlePaymentCaptured(paymentEntity) {
 
             if (paidAmountPaisa !== expectedAmountPaisa) {
                 console.log(`CRITICAL: Payment amount mismatch for order ${order.orderNumber}. Expected: ${expectedAmountPaisa} paise, Paid: ${paidAmountPaisa} paise. Aborting webhook processing.`);
-                
+
                 order.paymentStatus = 'amount_mismatch';
                 order.statusHistory.push({
                     status: 'pending',
@@ -1152,7 +1152,7 @@ exports.createPaymentLink = async (req, res) => {
         await order.save();
 
         // 4. Generate Razorpay Payment Link
-        const expireBy = Math.floor(Date.now() / 1000) + (86400 * 1); // expires in 1 days
+        const expireBy = Math.floor(Date.now() / 1000) + (900); // expires in 15 mins
         const paymentLinkOptions = {
             amount: amountInPaisa,
             currency: 'INR',
