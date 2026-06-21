@@ -56,6 +56,9 @@ module.exports = {
     // Pincode Validation Configuration
     PINCODE_VALIDATOR_API_URL: process.env.PINCODE_VALIDATOR_API_URL,
 
+    // IP Geolocation API Key (ip-api.com pro key)
+    IP_API_KEY: process.env.IP_API_KEY,
+
     // Admin Configuration
     ADMIN_EMAILS: process.env.ADMIN_EMAILS ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim()) : []
 };
