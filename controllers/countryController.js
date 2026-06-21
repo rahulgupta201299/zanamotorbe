@@ -75,6 +75,64 @@ exports.getLocationCurrency = async (req, res) => {
         });
     }
 };
+
+exports.getIpLocationCurrency = async (req, res) => {
+    try {
+        let ip = req.query.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        if (ip && ip.includes(',')) {
+            ip = ip.split(',')[0].trim();
+        }
+        if (ip && ip.startsWith('::ffff:')) {
+            ip = ip.substring(7);
+        }
+
+        let countryCode = 'IN'; // default fallback
+        let countryName = 'India';
+
+        const isLocalIp = !ip || ip === '127.0.0.1' || ip === '::1' || ip === 'localhost';
+
+        if (!isLocalIp) {
+            try {
+                const response = await axios.get(`http://ip-api.com/json/${ip}`);
+                if (response.data && response.data.status === 'success') {
+                    countryCode = response.data.countryCode;
+                    countryName = response.data.country;
+                }
+            } catch (apiError) {
+                console.error('Error calling IP geolocation API:', apiError.message);
+            }
+        }
+
+        const euroCountries = ['AT', 'BE', 'CY', 'EE', 'FI', 'FR', 'DE', 'GR', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PT', 'SK', 'SI', 'ES', 'HR'];
+
+        let currencyCode = 'USD'; // default
+        if (countryCode === 'IN') currencyCode = 'INR';
+        else if (countryCode === 'US') currencyCode = 'USD';
+        else if (countryCode === 'GB') currencyCode = 'GBP';
+        else if (euroCountries.includes(countryCode)) currencyCode = 'EUR';
+
+        // Find currency object from our currencyList
+        const currencyObj = currencies.find(c => c.code === currencyCode);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                ip,
+                countryCode,
+                countryName,
+                currency: currencyCode,
+                currencyDetails: currencyObj || { code: currencyCode }
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching IP location currency:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching IP location data'
+        });
+    }
+};
+
 exports.getCurrencies = async (req, res) => {
     try {
         const rates = await fetchExchangeRates();
