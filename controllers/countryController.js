@@ -94,9 +94,7 @@ exports.getIpLocationCurrency = async (req, res) => {
         if (!isLocalIp) {
             try {
                 const apiKey = config.IP_API_KEY;
-                const url = apiKey 
-                    ? `https://pro.ip-api.com/json/${ip}?key=${apiKey}`
-                    : `http://ip-api.com/json/${ip}`;
+                const url = `https://pro.ip-api.com/json/${ip}?key=${apiKey}`;
                 const response = await axios.get(url);
                 if (response.data && response.data.status === 'success') {
                     countryCode = response.data.countryCode;
