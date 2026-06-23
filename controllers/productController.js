@@ -228,9 +228,7 @@ exports.getProductsByModel = async (req, res) => {
 exports.getProductById = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
-        const product = await BikeProduct.findOne({ _id: req.params.id, isActive: true })
-            .populate('brand')
-            .populate('model');
+        const product = await BikeProduct.findOne({ _id: req.params.id, isActive: true });
         if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
 
         const productsWithWishlist = await addIsWishlistToProducts([product], phoneNumber);
