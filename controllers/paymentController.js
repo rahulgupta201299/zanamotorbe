@@ -738,7 +738,7 @@ exports.handleWebhook = async (req, res) => {
         const event = req.body.event;
         const paymentEntity = req.body.payload.payment.entity;
 
-        console.log('Webhook received:', event);
+        console.log('Webhook received:', event, 'for payment:', paymentEntity.id);
 
         switch (event) {
             case 'payment.captured':
@@ -762,10 +762,38 @@ exports.handleWebhook = async (req, res) => {
     }
 };
 
+// Fetch live payment status from Razorpay API
+async function fetchLivePaymentStatus(paymentId) {
+    try {
+        const payment = await razorpay.payments.fetch(paymentId);
+        return payment;
+    } catch (error) {
+        console.log(`Failed to fetch live payment status for ${paymentId}:`, error.message);
+        return null;
+    }
+}
+
 // Helper function to handle payment captured from webhook
 async function handlePaymentCaptured(paymentEntity) {
     try {
         const razorpayOrderId = paymentEntity.order_id;
+        const razorpayPaymentId = paymentEntity.id;
+
+        console.log(`Processing payment.captured webhook for payment: ${razorpayPaymentId}, order: ${razorpayOrderId}`);
+
+        const livePayment = await fetchLivePaymentStatus(razorpayPaymentId);
+        if (!livePayment) {
+            console.log(`Cannot verify live status for payment ${razorpayPaymentId}, skipping webhook processing`);
+            return;
+        }
+
+        const liveStatus = livePayment.status;
+        console.log(`Live payment status for ${razorpayPaymentId}: ${liveStatus}`);
+
+        if (liveStatus !== 'captured') {
+            console.log(`Payment ${razorpayPaymentId} live status is "${liveStatus}", not "captured". Webhook says "captured" but live check disagrees. Skipping.`);
+            return;
+        }
 
         // Find existing order by razorpayOrderId
         let order = await Order.findOne({ razorpayOrderId: razorpayOrderId });
@@ -781,6 +809,13 @@ async function handlePaymentCaptured(paymentEntity) {
         }
 
         if (order) {
+            // 🛡️ Check if the order already has a confirmed status (paid, partial_paid)
+            // Don't overwrite already confirmed statuses - this prevents a stale 'failed' from overriding
+            if (order.paymentStatus === 'paid' || order.paymentStatus === 'partial_paid') {
+                console.log(`Order ${order.orderNumber} already has paymentStatus "${order.paymentStatus}". Skipping update from potentially stale webhook.`);
+                return;
+            }
+
             // Validate payment amount (in paise) against expected order amount
             const paidAmountPaisa = paymentEntity.amount;
             let expectedAmountPaisa = 0;
@@ -820,7 +855,7 @@ async function handlePaymentCaptured(paymentEntity) {
                 });
             }
             order.orderStatus = 'placed';
-            order.razorpayPaymentId = paymentEntity.id;
+            order.razorpayPaymentId = razorpayPaymentId;
 
             await order.save();
 
@@ -863,6 +898,25 @@ async function handlePaymentCaptured(paymentEntity) {
 async function handlePaymentFailed(paymentEntity) {
     try {
         const razorpayOrderId = paymentEntity.order_id;
+        const razorpayPaymentId = paymentEntity.id;
+
+        console.log(`Processing payment.failed webhook for payment: ${razorpayPaymentId}, order: ${razorpayOrderId}`);
+
+        // 🛡️ Fetch LIVE payment status from Razorpay to confirm the payment is actually failed
+        const livePayment = await fetchLivePaymentStatus(razorpayPaymentId);
+        if (!livePayment) {
+            console.log(`Cannot verify live status for payment ${razorpayPaymentId}, skipping webhook processing`);
+            return;
+        }
+
+        const liveStatus = livePayment.status;
+        console.log(`Live payment status for ${razorpayPaymentId}: ${liveStatus}`);
+
+        // Only proceed if the live status confirms the payment has actually failed
+        if (liveStatus !== 'failed') {
+            console.log(`Payment ${razorpayPaymentId} live status is "${liveStatus}", not "failed". Webhook says "failed" but live check disagrees. Skipping.`);
+            return;
+        }
 
         // Find existing order by razorpayOrderId
         let order = await Order.findOne({ razorpayOrderId: razorpayOrderId });
@@ -878,6 +932,14 @@ async function handlePaymentFailed(paymentEntity) {
         }
 
         if (order) {
+            // 🛡️ Protection: If the order already has a successful payment status, do NOT overwrite it
+            // This handles the case where payment.captured was processed but then a stale
+            // payment.failed webhook arrives later
+            if (order.paymentStatus === 'paid' || order.paymentStatus === 'partial_paid') {
+                console.log(`Order ${order.orderNumber} already has paymentStatus "${order.paymentStatus}". Refusing to overwrite with "failed" from webhook.`);
+                return;
+            }
+
             order.paymentStatus = 'failed';
             order.orderStatus = 'cancelled';
             order.statusHistory.push({
