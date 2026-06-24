@@ -95,6 +95,17 @@ exports.createCODOrder = async (req, res) => {
             orderStatus: 'pending'
         });
 
+        // Cancel previous payment link if one was already generated to prevent duplicate payments on old links
+        const previousPaymentLinkId = (order && order.paymentLinkId) || cart.paymentLinkId;
+        if (previousPaymentLinkId) {
+            try {
+                console.log(`Cancelling previous Razorpay payment link from createCODOrder: ${previousPaymentLinkId}`);
+                await razorpay.paymentLink.cancel(previousPaymentLinkId);
+            } catch (cancelError) {
+                console.log(`Failed to cancel previous payment link ${previousPaymentLinkId} from createCODOrder:`, cancelError.message);
+            }
+        }
+
         const newOrderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
         const finalOrderNumber = order ? order.orderNumber : newOrderNumber;
 
@@ -114,6 +125,8 @@ exports.createCODOrder = async (req, res) => {
             order.currencySymbol = currencySymbol;
             order.paymentMethod = 'cod';
             order.advancePaid = advanceAmount;
+            order.paymentLinkId = null;
+            order.paymentShortUrl = null;
             order.orderDate = new Date();
         } else {
             order = new Order({
@@ -179,6 +192,8 @@ exports.createCODOrder = async (req, res) => {
         // Update cart with order reference but KEEP it active
         cart.orderId = order._id;
         cart.razorpayOrderId = razorpayOrder.id;
+        cart.paymentLinkId = null;
+        cart.paymentShortUrl = null;
         cart.paymentStatus = 'pending';
         await cart.save();
 
@@ -454,6 +469,17 @@ exports.createOrder = async (req, res) => {
             orderStatus: 'pending'
         });
 
+        // Cancel previous payment link if one was already generated to prevent duplicate payments on old links
+        const previousPaymentLinkId = (order && order.paymentLinkId) || cart.paymentLinkId;
+        if (previousPaymentLinkId) {
+            try {
+                console.log(`Cancelling previous Razorpay payment link from createOrder: ${previousPaymentLinkId}`);
+                await razorpay.paymentLink.cancel(previousPaymentLinkId);
+            } catch (cancelError) {
+                console.log(`Failed to cancel previous payment link ${previousPaymentLinkId} from createOrder:`, cancelError.message);
+            }
+        }
+
         const orderNumber = order ? order.orderNumber : `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
         // Prepare order items with product details
@@ -483,6 +509,8 @@ exports.createOrder = async (req, res) => {
             order.paymentMethod = 'online'; // Ensure paymentMethod is updated to online
             order.currency = validCurrency ? currency : 'INR';
             order.currencySymbol = currencySymbol;
+            order.paymentLinkId = null;
+            order.paymentShortUrl = null;
             order.orderDate = new Date(); // Update date to reflect latest attempt
 
             // Note: razorpayOrderId might need to be recreated if amount changed
@@ -549,6 +577,8 @@ exports.createOrder = async (req, res) => {
         // Update cart with order reference but KEEP it active
         cart.orderId = order._id;
         cart.razorpayOrderId = razorpayOrder.id;
+        cart.paymentLinkId = null;
+        cart.paymentShortUrl = null;
         cart.paymentStatus = 'pending';
         // cart.status remains 'active' to allow user to return to cart
         await cart.save();
@@ -738,9 +768,42 @@ async function handlePaymentCaptured(paymentEntity) {
         const razorpayOrderId = paymentEntity.order_id;
 
         // Find existing order by razorpayOrderId
-        const order = await Order.findOne({ razorpayOrderId: razorpayOrderId });
+        let order = await Order.findOne({ razorpayOrderId: razorpayOrderId });
+
+        // Safety fallback: if order not found by razorpayOrderId, try locating it via notes
+        if (!order && paymentEntity.notes && paymentEntity.notes.orderId) {
+            console.log('Order not found by razorpayOrderId, attempting lookup via notes.orderId:', paymentEntity.notes.orderId);
+            order = await Order.findById(paymentEntity.notes.orderId);
+            if (order && !order.razorpayOrderId) {
+                order.razorpayOrderId = razorpayOrderId;
+                await order.save();
+            }
+        }
 
         if (order) {
+            // Validate payment amount (in paise) against expected order amount
+            const paidAmountPaisa = paymentEntity.amount;
+            let expectedAmountPaisa = 0;
+
+            if (order.paymentMethod === 'cod') {
+                expectedAmountPaisa = Math.round(order.advancePaid * 100);
+            } else {
+                expectedAmountPaisa = Math.round(order.totalAmount * 100);
+            }
+
+            if (paidAmountPaisa !== expectedAmountPaisa) {
+                console.log(`CRITICAL: Payment amount mismatch for order ${order.orderNumber}. Expected: ${expectedAmountPaisa} paise, Paid: ${paidAmountPaisa} paise. Aborting webhook processing.`);
+
+                order.paymentStatus = 'amount_mismatch';
+                order.statusHistory.push({
+                    status: 'pending',
+                    timestamp: new Date(),
+                    notes: `Payment capture failed: paid amount ${paidAmountPaisa / 100} does not match expected amount ${expectedAmountPaisa / 100}`
+                });
+                await order.save();
+                return;
+            }
+
             if (order.paymentMethod === 'cod') {
                 order.paymentStatus = 'partial_paid';
                 order.statusHistory.push({
@@ -802,7 +865,17 @@ async function handlePaymentFailed(paymentEntity) {
         const razorpayOrderId = paymentEntity.order_id;
 
         // Find existing order by razorpayOrderId
-        const order = await Order.findOne({ razorpayOrderId: razorpayOrderId });
+        let order = await Order.findOne({ razorpayOrderId: razorpayOrderId });
+
+        // Safety fallback: if order not found by razorpayOrderId, try locating it via notes
+        if (!order && paymentEntity.notes && paymentEntity.notes.orderId) {
+            console.log('Order not found by razorpayOrderId in handlePaymentFailed, attempting lookup via notes.orderId:', paymentEntity.notes.orderId);
+            order = await Order.findById(paymentEntity.notes.orderId);
+            if (order && !order.razorpayOrderId) {
+                order.razorpayOrderId = razorpayOrderId;
+                await order.save();
+            }
+        }
 
         if (order) {
             order.paymentStatus = 'failed';
@@ -918,6 +991,239 @@ exports.getPaymentStatus = async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Failed to get payment status'
+        });
+    }
+};
+
+// Create payment link and send it via SMS
+exports.createPaymentLink = async (req, res) => {
+    try {
+        const { phoneNumber } = req.body;
+
+        if (!phoneNumber) {
+            return res.status(400).json({
+                success: false,
+                error: 'Phone number is required'
+            });
+        }
+
+        // 1. Retrieve the active cart
+        const cart = await Cart.findOne({
+            phoneNumber,
+            status: 'active'
+        }).populate('items.product');
+
+        if (!cart) {
+            return res.status(404).json({
+                success: false,
+                error: 'No active cart found'
+            });
+        }
+
+        // 2. Perform necessary validations on cart
+        if (cart.items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Cart is empty'
+            });
+        }
+
+        if (!cart.shippingAddress || !cart.billingAddress) {
+            return res.status(400).json({
+                success: false,
+                error: 'Shipping and billing addresses are required'
+            });
+        }
+
+        // Stock availability validation
+        for (const item of cart.items) {
+            const product = item.product;
+            if (!product) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'One or more products in the cart are no longer available'
+                });
+            }
+            if (product.quantityAvailable < item.quantity) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Insufficient stock for product "${product.name}". Only ${product.quantityAvailable} items available.`
+                });
+            }
+        }
+
+        // Clear COD charges if present and ensure payment method is online
+        if (cart.codCharges > 0 || cart.paymentMethod === 'cod') {
+            cart.codCharges = 0;
+            cart.paymentMethod = 'online';
+            await cart.save();
+        }
+
+        const amountInPaisa = Math.round(cart.totalAmount * 100);
+
+        // 3. Prepare or update the pending Order document
+        let order = await Order.findOne({
+            originalCartId: cart._id,
+            orderStatus: 'pending'
+        });
+
+        // Safeguard: If the existing order has already been paid, do not allow regeneration of the payment link
+        if (order && (order.paymentStatus === 'paid' || order.paymentStatus === 'partial_paid')) {
+            return res.status(400).json({
+                success: false,
+                error: 'Payment has already been received/completed for this order'
+            });
+        }
+
+        // Cancel previous payment link if one was already generated to prevent duplicate payments on old links
+        const previousPaymentLinkId = (order && order.paymentLinkId) || cart.paymentLinkId;
+        if (previousPaymentLinkId) {
+            try {
+                console.log(`Cancelling previous Razorpay payment link: ${previousPaymentLinkId}`);
+                await razorpay.paymentLink.cancel(previousPaymentLinkId);
+            } catch (cancelError) {
+                // Log and bypass so that payment link generation doesn't crash if the link was already paid, expired, or cancelled
+                console.log(`Failed to cancel previous payment link ${previousPaymentLinkId}:`, cancelError.message);
+            }
+        }
+
+        const orderNumber = order ? order.orderNumber : `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+
+        // Prepare order items
+        const orderItems = cart.items.map(item => ({
+            product: item.product._id,
+            productName: item.product.name || 'Unknown Product',
+            productImage: item.product.images ? item.product.images[0] : null,
+            quantity: item.quantity,
+            price: item.price,
+            totalPrice: item.totalPrice
+        }));
+
+        if (order) {
+            // Update existing order
+            order.items = orderItems;
+            order.shippingAddress = cart.shippingAddress;
+            order.billingAddress = cart.billingAddress;
+            order.shippingAddressSameAsBillingAddress = cart.shippingAddressSameAsBillingAddress;
+            order.subtotal = cart.subtotal;
+            order.shippingCost = cart.shippingCost;
+            order.taxAmount = cart.taxAmount;
+            order.discountAmount = cart.discountAmount;
+            order.codCharges = 0;
+            order.advancePaid = 0;
+            order.couponCode = cart.couponCode;
+            order.totalAmount = cart.totalAmount;
+            order.paymentMethod = 'online';
+            order.currency = 'INR';
+            order.currencySymbol = '₹';
+            order.orderDate = new Date();
+        } else {
+            // Create a new pending order
+            order = new Order({
+                orderNumber: orderNumber,
+                phoneNumber: cart.phoneNumber,
+                emailId: cart.emailId,
+                items: orderItems,
+                shippingAddress: cart.shippingAddress,
+                billingAddress: cart.billingAddress,
+                shippingAddressSameAsBillingAddress: cart.shippingAddressSameAsBillingAddress,
+                subtotal: cart.subtotal,
+                shippingCost: cart.shippingCost,
+                taxAmount: cart.taxAmount,
+                discountAmount: cart.discountAmount,
+                couponCode: cart.couponCode,
+                totalAmount: cart.totalAmount,
+                currency: 'INR',
+                currencySymbol: '₹',
+                paymentMethod: 'online',
+                paymentStatus: 'pending',
+                orderStatus: 'pending',
+                statusHistory: [{
+                    status: 'pending',
+                    timestamp: new Date(),
+                    notes: 'Order created, awaiting payment link confirmation'
+                }],
+                orderDate: new Date(),
+                originalCartId: cart._id
+            });
+        }
+
+        // Save order to get its _id (if new)
+        await order.save();
+
+        // 4. Generate Razorpay Payment Link
+        const expireBy = Math.floor(Date.now() / 1000) + (900); // expires in 15 mins
+        const paymentLinkOptions = {
+            amount: amountInPaisa,
+            currency: 'INR',
+            accept_partial: false,
+            first_min_partial_amount: 0,
+            expire_by: expireBy,
+            reference_id: orderNumber,
+            description: `Payment for Order ${orderNumber}`,
+            customer: {
+                name: cart.shippingAddress.fullName || 'Customer',
+                email: cart.emailId || undefined,
+                contact: cart.phoneNumber
+            },
+            notify: {
+                sms: true,
+                email: true,
+            },
+            reminder_enable: true,
+            notes: {
+                orderId: order._id.toString(),
+                orderNumber: orderNumber,
+                phoneNumber: phoneNumber
+            }
+        };
+
+        let razorpayPaymentLink;
+        try {
+            razorpayPaymentLink = await razorpay.paymentLink.create(paymentLinkOptions);
+            console.log(`Generated Razorpay Payment Link: ${razorpayPaymentLink.id} - ${razorpayPaymentLink.short_url}`);
+        } catch (razorpayError) {
+            console.log('Razorpay payment link creation failed:', razorpayError);
+            return res.status(500).json({
+                success: false,
+                error: 'Failed to generate payment link. Please try again.'
+            });
+        }
+
+        // 5. Update Order with Razorpay order ID (created for link) and payment link details
+        console.log('razorpayPaymentLink' + JSON.stringify(razorpayPaymentLink, null, 2))
+        order.razorpayOrderId = razorpayPaymentLink.order_id;
+        order.paymentLinkId = razorpayPaymentLink.id;
+        order.paymentShortUrl = razorpayPaymentLink.short_url;
+        await order.save();
+
+        // 6. Update Cart with order reference, Razorpay order ID, and payment link details
+        cart.orderId = order._id;
+        cart.razorpayOrderId = razorpayPaymentLink.order_id;
+        cart.paymentLinkId = razorpayPaymentLink.id;
+        cart.paymentShortUrl = razorpayPaymentLink.short_url;
+        cart.paymentStatus = 'pending';
+        await cart.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Payment link generated successfully.',
+            data: {
+                orderId: order._id,
+                orderNumber: order.orderNumber,
+                cartId: cart._id,
+                paymentLinkId: razorpayPaymentLink.id,
+                paymentLink: razorpayPaymentLink.short_url,
+                amount: cart.totalAmount,
+                currency: 'INR'
+            }
+        });
+
+    } catch (error) {
+        console.log('Error in createPaymentLink:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to create payment link'
         });
     }
 };

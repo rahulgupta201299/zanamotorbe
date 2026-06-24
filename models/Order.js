@@ -143,6 +143,12 @@ const orderSchema = new mongoose.Schema({
     razorpayOrderId: {
         type: String
     },
+    paymentLinkId: {
+        type: String
+    },
+    paymentShortUrl: {
+        type: String
+    },
     razorpayPaymentId: {
         type: String
     },
