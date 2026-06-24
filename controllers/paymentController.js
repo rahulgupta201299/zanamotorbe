@@ -1152,7 +1152,9 @@ exports.createPaymentLink = async (req, res) => {
         await order.save();
 
         // 4. Generate Razorpay Payment Link
+        const now = Math.floor(Date.now() / 1000)
         const expireBy = Math.floor(Date.now() / 1000) + (900); // expires in 15 mins
+        console.log({ now, expireBy, diff: expireBy - now });
         console.log(`expireBy: ${expireBy}`)
         const paymentLinkOptions = {
             amount: amountInPaisa,
