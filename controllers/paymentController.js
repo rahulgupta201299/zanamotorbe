@@ -811,8 +811,21 @@ async function handlePaymentCaptured(paymentEntity) {
         if (order) {
             // 🛡️ Check if the order already has a confirmed status (paid, partial_paid)
             // Don't overwrite already confirmed statuses - this prevents a stale 'failed' from overriding
+            // HOWEVER: if orderStatus is still 'processing' (set by verifyPayment before the webhook arrived),
+            // we must still promote it to 'placed' since the webhook is the authoritative confirmation.
             if (order.paymentStatus === 'paid' || order.paymentStatus === 'partial_paid') {
-                console.log(`Order ${order.orderNumber} already has paymentStatus "${order.paymentStatus}". Skipping update from potentially stale webhook.`);
+                if (order.orderStatus !== 'placed' && order.orderStatus !== 'delivered' && order.orderStatus !== 'cancelled') {
+                    console.log(`Order ${order.orderNumber} has paymentStatus "${order.paymentStatus}" but orderStatus is "${order.orderStatus}". Promoting orderStatus to 'placed' via webhook.`);
+                    order.orderStatus = 'placed';
+                    order.statusHistory.push({
+                        status: 'placed',
+                        timestamp: new Date(),
+                        notes: 'Payment confirmed via webhook (orderStatus promoted from processing)'
+                    });
+                    await order.save();
+                } else {
+                    console.log(`Order ${order.orderNumber} already has paymentStatus "${order.paymentStatus}" and orderStatus "${order.orderStatus}". Skipping update from potentially stale webhook.`);
+                }
                 return;
             }
 
