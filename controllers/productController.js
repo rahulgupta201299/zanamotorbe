@@ -3,16 +3,18 @@ const BikeModel = require('../models/BikeModel');
 const Wishlist = require('../models/Wishlist');
 const { getConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
+const mongoose = require('mongoose');
+const { uploadToS3, deleteFromS3 } = require('../utils/s3');
 
 // Helper function to add isWishlist field to products
 const addIsWishlistToProducts = async (products, phoneNumber) => {
     if (!phoneNumber) {
         return products.map(product => ({ ...product.toObject(), isWishlist: false }));
     }
-    
+
     const wishlist = await Wishlist.findOne({ phoneNumber });
     const wishlistProductIds = wishlist ? wishlist.products.map(id => id.toString()) : [];
-    
+
     return products.map(product => ({
         ...product.toObject(),
         isWishlist: wishlistProductIds.includes(product._id.toString())
@@ -27,7 +29,7 @@ const convertProductPrices = async (products, currency) => {
 
     // Get INR info for default currency
     const inrCurrency = currencyList.find(c => c.code === 'INR');
-    
+
     if (!currency || currency === 'INR') {
         // For INR, still add currency info for consistency
         const convertedProducts = products.map((product) => {
@@ -62,7 +64,7 @@ const convertProductPrices = async (products, currency) => {
             const productObj = product.toObject ? product.toObject() : product;
             const originalPrice = productObj.price || 0;
             const convertedPrice = await getConvertedPrice(originalPrice, currency);
-            
+
             return {
                 ...productObj,
                 price: convertedPrice,
@@ -80,7 +82,7 @@ const convertProductPrices = async (products, currency) => {
 const convertSingleProductPrice = async (product, currency) => {
     // Get INR info for default currency
     const inrCurrency = currencyList.find(c => c.code === 'INR');
-    
+
     if (!currency || currency === 'INR') {
         // For INR, still add currency info for consistency
         const productObj = product.toObject ? product.toObject() : product;
@@ -118,8 +120,30 @@ const convertSingleProductPrice = async (product, currency) => {
 
 exports.createProduct = async (req, res) => {
     try {
-        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
+        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, isComingSoon, shortDescription, longDescription, description, category, subCategory, categoryIcon, price, quantityAvailable, specifications, shippingAndReturn, isActive, priority } = req.body;
         const autoBikeSpecific = model ? (isBikeSpecific !== undefined ? isBikeSpecific : true) : false;
+
+        let imageUrl = req.body.imageUrl;
+        let images = req.body.images;
+
+        if (!images) {
+            images = [];
+        } else if (!Array.isArray(images)) {
+            images = [images];
+        }
+
+        if (req.files) {
+            const mainImageFile = req.files.imageUrl?.[0] || req.files.image?.[0];
+            if (mainImageFile) {
+                imageUrl = await uploadToS3(mainImageFile, 'products');
+            }
+            if (req.files.images && req.files.images.length > 0) {
+                for (const file of req.files.images) {
+                    const url = await uploadToS3(file, 'products');
+                    images.push(url);
+                }
+            }
+        }
 
         const newProduct = new BikeProduct({
             brand,
@@ -129,17 +153,21 @@ exports.createProduct = async (req, res) => {
             productCode,
             isNewArrival,
             isGarageFavorite,
+            isComingSoon,
             shortDescription,
             longDescription,
             description,
             category,
+            subCategory,
             categoryIcon,
             price,
             imageUrl,
             images,
             quantityAvailable,
             specifications,
-            shippingAndReturn
+            shippingAndReturn,
+            isActive,
+            priority
         });
         await newProduct.save();
         res.status(201).json({ success: true, data: newProduct });
@@ -150,17 +178,26 @@ exports.createProduct = async (req, res) => {
 
 exports.getProductsByModel = async (req, res) => {
     try {
-        const { phoneNumber, currency } = req.query;
+        const { phoneNumber, currency, category, subCategory } = req.query;
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 1000;
         const skip = (page - 1) * limit;
 
-        const totalProducts = await BikeProduct.countDocuments({ model: req.params.modelId });
+        const query = { model: req.params.modelId, isActive: true };
 
-        const products = await BikeProduct.find({ model: req.params.modelId })
+        if (category) {
+            query.category = { $regex: new RegExp(category, 'i') };
+        }
+        if (subCategory) {
+            query.subCategory = { $regex: new RegExp(subCategory, 'i') };
+        }
+
+        const totalProducts = await BikeProduct.countDocuments(query);
+
+        const products = await BikeProduct.find(query)
             .skip(skip)
             .limit(limit)
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -191,12 +228,12 @@ exports.getProductsByModel = async (req, res) => {
 exports.getProductById = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
-        const product = await BikeProduct.findById(req.params.id);
+        const product = await BikeProduct.findOne({ _id: req.params.id, isActive: true });
         if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-        
+
         const productsWithWishlist = await addIsWishlistToProducts([product], phoneNumber);
         const productWithCurrency = await convertSingleProductPrice(productsWithWishlist[0], currency);
-        
+
         res.status(200).json({ success: true, data: productWithCurrency });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -205,18 +242,81 @@ exports.getProductById = async (req, res) => {
 
 exports.updateProduct = async (req, res) => {
     try {
-        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn } = req.body;
+        const { brand, model, isBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, isComingSoon, shortDescription, longDescription, description, category, subCategory, categoryIcon, price, quantityAvailable, specifications, shippingAndReturn, isActive, priority } = req.body;
+
+        const existingProduct = await BikeProduct.findById(req.params.id);
+        if (!existingProduct) return res.status(404).json({ success: false, message: 'Product not found' });
+
+        let imageUrl = req.body.imageUrl;
+        const mainImageFile = req.files?.imageUrl?.[0] || req.files?.image?.[0];
+        if (mainImageFile) {
+            imageUrl = await uploadToS3(mainImageFile, 'products');
+            if (existingProduct.imageUrl) {
+                await deleteFromS3(existingProduct.imageUrl);
+            }
+        } else if (imageUrl === undefined) {
+            imageUrl = existingProduct.imageUrl;
+        } else if (imageUrl !== existingProduct.imageUrl && existingProduct.imageUrl) {
+            await deleteFromS3(existingProduct.imageUrl);
+        }
+
+        let updatedImages = existingProduct.images || [];
+
+        if (req.body.images !== undefined) {
+            let retainedImages = req.body.images;
+            if (!Array.isArray(retainedImages)) {
+                retainedImages = retainedImages ? [retainedImages] : [];
+            }
+
+            const deletedImages = updatedImages.filter(url => !retainedImages.includes(url));
+            for (const url of deletedImages) {
+                await deleteFromS3(url);
+            }
+            updatedImages = [...retainedImages];
+        }
+
+        if (req.files && req.files.images && req.files.images.length > 0) {
+            for (const file of req.files.images) {
+                const url = await uploadToS3(file, 'products');
+                updatedImages.push(url);
+            }
+        }
 
         const autoBikeSpecific = model ?
             (isBikeSpecific !== undefined ? isBikeSpecific : true) :
             false;
 
+        const updateFields = {
+            brand, model, isBikeSpecific: autoBikeSpecific, name, productCode,
+            isNewArrival, isGarageFavorite, isComingSoon, shortDescription,
+            longDescription, description, category, subCategory, categoryIcon,
+            price, imageUrl, images: updatedImages, quantityAvailable, specifications,
+            shippingAndReturn, isActive, priority
+        };
+
+        // Remove undefined fields
+        Object.keys(updateFields).forEach(key => updateFields[key] === undefined && delete updateFields[key]);
+
         const product = await BikeProduct.findByIdAndUpdate(
             req.params.id,
-            { brand, model, isBikeSpecific: autoBikeSpecific, name, productCode, isNewArrival, isGarageFavorite, shortDescription, longDescription, description, category, categoryIcon, price, imageUrl, images, quantityAvailable, specifications, shippingAndReturn },
+            updateFields,
             { new: true }
         );
-        if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+
+        // If quantity or price is updated, update all products with the same productCode
+        if (updateFields.quantityAvailable !== undefined || updateFields.price !== undefined) {
+            const currentProductCode = updateFields.productCode || existingProduct.productCode;
+            if (currentProductCode) {
+                const syncUpdates = {};
+                if (updateFields.quantityAvailable !== undefined) syncUpdates.quantityAvailable = updateFields.quantityAvailable;
+                if (updateFields.price !== undefined) syncUpdates.price = updateFields.price;
+
+                await BikeProduct.updateMany(
+                    { productCode: currentProductCode, _id: { $ne: req.params.id } },
+                    { $set: syncUpdates }
+                );
+            }
+        }
         res.status(200).json({ success: true, data: product });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -230,12 +330,18 @@ exports.getProductsByCategory = async (req, res) => {
         const limit = parseInt(req.query.limit) || 1000;
         const skip = (page - 1) * limit;
 
-        const totalProducts = await BikeProduct.countDocuments({ category: { $regex: new RegExp(req.params.category, 'i') } });
+        const query = {
+            category: { $regex: new RegExp(req.params.category, 'i') },
+            isBikeSpecific: false,
+            isActive: true
+        };
 
-        const products = await BikeProduct.find({ category: { $regex: new RegExp(req.params.category, 'i') } })
+        const totalProducts = await BikeProduct.countDocuments(query);
+
+        const products = await BikeProduct.find(query)
             .skip(skip)
             .limit(limit)
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -263,6 +369,54 @@ exports.getProductsByCategory = async (req, res) => {
     }
 };
 
+exports.getProductsByCategoryAndSubCategory = async (req, res) => {
+    try {
+        const { phoneNumber, currency } = req.query;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 1000;
+        const skip = (page - 1) * limit;
+
+        const query = {
+            category: { $regex: new RegExp(req.params.category, 'i') },
+            subCategory: { $regex: new RegExp(req.params.subCategory, 'i') },
+            isBikeSpecific: false,
+            isActive: true
+        };
+
+        const totalProducts = await BikeProduct.countDocuments(query);
+
+        const products = await BikeProduct.find(query)
+            .skip(skip)
+            .limit(limit)
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
+
+        const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
+        const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
+
+        const totalPages = Math.ceil(totalProducts / limit);
+        const hasNextPage = page < totalPages;
+        const hasPrevPage = page > 1;
+
+        res.status(200).json({
+            success: true,
+            data: productsWithCurrency,
+            pagination: {
+                currentPage: page,
+                totalPages: totalPages,
+                totalProducts: totalProducts,
+                productsPerPage: limit,
+                hasNextPage: hasNextPage,
+                hasPrevPage: hasPrevPage,
+                nextPage: hasNextPage ? page + 1 : null,
+                prevPage: hasPrevPage ? page - 1 : null
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+
 exports.getAllProductsPaginated = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
@@ -270,12 +424,12 @@ exports.getAllProductsPaginated = async (req, res) => {
         const limit = parseInt(req.query.limit) || 1000;
         const skip = (page - 1) * limit;
 
-        const totalProducts = await BikeProduct.countDocuments();
+        const totalProducts = await BikeProduct.countDocuments({ isActive: true });
 
-        const products = await BikeProduct.find()
+        const products = await BikeProduct.find({ isActive: true, isBikeSpecific: false })
             .skip(skip)
             .limit(limit)
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
@@ -305,41 +459,45 @@ exports.getAllProductsPaginated = async (req, res) => {
 
 exports.searchProducts = async (req, res) => {
     try {
-        const { query, page = 1, limit = 1000, currency } = req.query;
+        const { query, page = 1, limit = 1000, currency, all } = req.query;
         if (!query) {
-        return res.status(400).json({ success: false, message: 'Query parameter is required' });
+            return res.status(400).json({ success: false, message: 'Query parameter is required' });
         }
         const skip = (page - 1) * parseInt(limit);
 
         // Decode URL-encoded query to handle spaces (%20, + etc.)
         let decodedQuery = decodeURIComponent(query);
-        
+
         // Escape special regex characters and handle spaces
         const escapedQuery = decodedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, ' ').trim();
         const caseInsensitiveRegex = { $regex: escapedQuery, $options: 'i' };
 
-        const matchingModels = await BikeModel.find({ name: caseInsensitiveRegex }).select('_id');
+        const modelQuery = { name: caseInsensitiveRegex };
+        if (all !== 'true') {
+            modelQuery.isActive = true;
+        }
+        const matchingModels = await BikeModel.find(modelQuery).select('_id');
         const modelIds = matchingModels.map(m => m._id);
 
-        const totalCount = await BikeProduct.countDocuments({
+        const searchQuery = {
             $or: [
                 { name: caseInsensitiveRegex },
                 { productCode: caseInsensitiveRegex },
                 { model: { $in: modelIds } }
             ]
-        });
+        };
 
-        const products = await BikeProduct.find({
-            $or: [
-                { name: caseInsensitiveRegex },
-                { productCode: caseInsensitiveRegex },
-                { model: { $in: modelIds } }
-            ]
-        })
-            .select('name _id shortDescription price imageUrl category productCode quantityAvailable')
+        if (all !== 'true') {
+            searchQuery.isActive = true;
+        }
+
+        const totalCount = await BikeProduct.countDocuments(searchQuery);
+
+        const products = await BikeProduct.find(searchQuery)
+            .select('name _id shortDescription price imageUrl category productCode quantityAvailable priority')
             .skip(skip)
             .limit(parseInt(limit))
-            .sort({ quantityAvailable: -1, createdAt: -1 });
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
 
         const productsWithCurrency = await convertProductPrices(products, currency);
         const totalPages = Math.ceil(totalCount / limit);
@@ -366,8 +524,76 @@ exports.searchProducts = async (req, res) => {
 exports.getCategoryCounts = async (req, res) => {
     try {
         const { currency } = req.query;
-        
+
         const categoriesData = await BikeProduct.aggregate([
+            { $match: { isActive: true, isBikeSpecific: false } },
+            {
+                $group: {
+                    _id: '$category',
+                    count: { $sum: 1 },
+                    categoryIcon: { $first: '$categoryIcon' },
+                    samplePrice: { $first: '$price' }
+                }
+            },
+            {
+                $sort: { count: -1 }
+            },
+            {
+                $project: {
+                    name: '$_id',
+                    icon: '$categoryIcon',
+                    count: 1,
+                    _id: 0
+                }
+            }
+        ]);
+
+        // Get INR info for default currency
+        const inrCurrency = currencyList.find(c => c.code === 'INR');
+
+        // Convert prices if currency is provided
+        if (currency && currency !== 'INR') {
+            const validCurrency = currencyList.find(c => c.code === currency);
+            if (validCurrency) {
+                for (let cat of categoriesData) {
+                    if (cat.samplePrice) {
+                        cat.price = await getConvertedPrice(cat.samplePrice, currency);
+                        cat.currency = currency;
+                        cat.currencySymbol = validCurrency.symbol;
+                    }
+                }
+            }
+        } else {
+            // Always include INR currency info for consistency
+            for (let cat of categoriesData) {
+                if (cat.samplePrice) {
+                    cat.currency = 'INR';
+                    cat.currencySymbol = inrCurrency ? inrCurrency.symbol : '₹';
+                }
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            data: categoriesData
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getCategoryCountsByModel = async (req, res) => {
+    try {
+        const { modelId } = req.params;
+        const { currency } = req.query;
+
+        const categoriesData = await BikeProduct.aggregate([
+            {
+                $match: {
+                    model: new mongoose.Types.ObjectId(modelId),
+                    isActive: true
+                }
+            },
             {
                 $group: {
                     _id: '$category',
@@ -426,12 +652,12 @@ exports.getCategoryCounts = async (req, res) => {
 exports.getGarageFavorites = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
-        const products = await BikeProduct.find({ isGarageFavorite: true })
-            .sort({ quantityAvailable: -1, createdAt: -1 });
-        
+        const products = await BikeProduct.find({ isGarageFavorite: true, isActive: true })
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
+
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
-        
+
         res.status(200).json({ success: true, data: productsWithCurrency });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -441,13 +667,110 @@ exports.getGarageFavorites = async (req, res) => {
 exports.getNewArrivals = async (req, res) => {
     try {
         const { phoneNumber, currency } = req.query;
-        const products = await BikeProduct.find({ isNewArrival: true })
-            .sort({ quantityAvailable: -1, createdAt: -1 });
-        
+        const products = await BikeProduct.find({ isNewArrival: true, isActive: true })
+            .sort({ priority: 1, quantityAvailable: -1, createdAt: -1 });
+
         const productsWithWishlist = await addIsWishlistToProducts(products, phoneNumber);
         const productsWithCurrency = await convertProductPrices(productsWithWishlist, currency);
-        
+
         res.status(200).json({ success: true, data: productsWithCurrency });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getSubCategoryCountsByCategory = async (req, res) => {
+    try {
+        const { category } = req.params;
+        const subCategoriesData = await BikeProduct.aggregate([
+            {
+                $match: {
+                    category: { $regex: new RegExp(category, 'i') },
+                    isBikeSpecific: false,
+                    isActive: true
+                }
+            },
+            {
+                $group: {
+                    _id: '$subCategory',
+                    count: { $sum: 1 }
+                }
+            },
+            {
+                $sort: { count: -1 }
+            },
+            {
+                $project: {
+                    name: '$_id',
+                    count: 1,
+                    _id: 0
+                }
+            }
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: subCategoriesData
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getSubCategoryCountsByCategoryAndModel = async (req, res) => {
+    try {
+        const { category, modelId } = req.params;
+        const subCategoriesData = await BikeProduct.aggregate([
+            {
+                $match: {
+                    category: { $regex: new RegExp(category, 'i') },
+                    model: new mongoose.Types.ObjectId(modelId),
+                    isActive: true
+                }
+            },
+            {
+                $group: {
+                    _id: '$subCategory',
+                    count: { $sum: 1 }
+                }
+            },
+            {
+                $sort: { count: -1 }
+            },
+            {
+                $project: {
+                    name: '$_id',
+                    count: 1,
+                    _id: 0
+                }
+            }
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: subCategoriesData
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.deleteProduct = async (req, res) => {
+    try {
+        const product = await BikeProduct.findByIdAndDelete(req.params.id);
+        if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+
+        if (product.imageUrl) {
+            await deleteFromS3(product.imageUrl);
+        }
+
+        if (product.images && product.images.length > 0) {
+            for (const url of product.images) {
+                await deleteFromS3(url);
+            }
+        }
+
+        res.status(200).json({ success: true, data: { message: 'Product deleted successfully' } });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

@@ -21,6 +21,10 @@ const bikeProductSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    isComingSoon: {
+        type: Boolean,
+        default: false
+    },
     name: {
         type: String,
         required: true
@@ -38,6 +42,9 @@ const bikeProductSchema = new mongoose.Schema({
         type: String
     },
     category: {
+        type: String
+    },
+    subCategory: {
         type: String
     },
     categoryIcon: {
@@ -62,6 +69,13 @@ const bikeProductSchema = new mongoose.Schema({
     },
     shippingAndReturn: {
         type: String
+    },
+    isActive: {
+        type: Boolean,
+        default: true
+    },
+    priority: {
+        type: Number
     },
     createdAt: {
         type: Date,

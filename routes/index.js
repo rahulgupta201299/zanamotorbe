@@ -13,8 +13,7 @@ router.use('/order', require('./order'));
 router.use('/coupon', require('./coupon'));
 router.use('/wishlist', require('./wishlist'));
 router.use('/payment', require('./payment'));
-
-// OTP routes
 router.use('/otp', require('./otp'));
+router.use('/category', require('./category'));
 
 module.exports = router;

@@ -106,6 +106,14 @@ const orderSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    codCharges: {
+        type: Number,
+        default: 0
+    },
+    advancePaid: {
+        type: Number,
+        default: 0
+    },
     couponCode: {
         type: String,
         default: null
@@ -129,10 +137,16 @@ const orderSchema = new mongoose.Schema({
     },
     paymentStatus: {
         type: String,
-        enum: ['pending', 'paid', 'failed', 'refunded'],
+        enum: ['pending', 'partial_paid', 'paid', 'failed', 'refunded'],
         default: 'pending'
     },
     razorpayOrderId: {
+        type: String
+    },
+    paymentLinkId: {
+        type: String
+    },
+    paymentShortUrl: {
         type: String
     },
     razorpayPaymentId: {
@@ -193,9 +207,8 @@ orderSchema.index({ orderStatus: 1 });
 orderSchema.index({ orderDate: -1 });
 
 // Pre-save middleware to update timestamp
-orderSchema.pre('save', function (next) {
+orderSchema.pre('save', async function () {
     this.updatedAt = Date.now();
-    next();
 });
 
 module.exports = mongoose.model('Order', orderSchema);

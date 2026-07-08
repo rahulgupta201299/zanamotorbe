@@ -21,10 +21,9 @@ const wishlistSchema = new mongoose.Schema({
 });
 
 // Ensure unique products in wishlist
-wishlistSchema.pre('save', function(next) {
+wishlistSchema.pre('save', async function() {
     this.products = [...new Set(this.products.map(id => id.toString()))].map(id => new mongoose.Types.ObjectId(id));
     this.updatedAt = Date.now();
-    next();
 });
 
 module.exports = mongoose.model('Wishlist', wishlistSchema);

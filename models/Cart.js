@@ -86,6 +86,10 @@ const cartSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    codCharges: {
+        type: Number,
+        default: 0
+    },
     couponCode: {
         type: String,
         default: null
@@ -100,7 +104,18 @@ const cartSchema = new mongoose.Schema({
         default: 0
     },
     // Payment-related fields (set before checkout)
+    orderId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Order',
+        default: null
+    },
     razorpayOrderId: {
+        type: String
+    },
+    paymentLinkId: {
+        type: String
+    },
+    paymentShortUrl: {
         type: String
     },
     paymentMethod: {
@@ -109,7 +124,7 @@ const cartSchema = new mongoose.Schema({
     },
     paymentStatus: {
         type: String,
-        enum: ['pending', 'paid', 'failed', 'refunded'],
+        enum: ['pending', 'partial_paid', 'paid', 'failed', 'refunded'],
         default: 'pending'
     },
     status: {
@@ -132,11 +147,10 @@ cartSchema.index({ phoneNumber: 1 });
 cartSchema.index({ status: 1 });
 
 // Pre-save middleware to calculate totals
-cartSchema.pre('save', function(next) {
+cartSchema.pre('save', async function() {
     this.subtotal = this.items.reduce((total, item) => total + item.totalPrice, 0);
-    this.totalAmount = this.subtotal + this.shippingCost + this.taxAmount - this.discountAmount;
+    this.totalAmount = this.subtotal + this.shippingCost + this.taxAmount + (this.codCharges || 0) - this.discountAmount;
     this.updatedAt = Date.now();
-    next();
 });
 
 module.exports = mongoose.model('Cart', cartSchema);

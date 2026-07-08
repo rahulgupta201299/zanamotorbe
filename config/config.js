@@ -1,6 +1,8 @@
 require('dotenv').config();
 
 module.exports = {
+    BYPASS_OTP: process.env.BYPASS_OTP === 'true',
+
     // Server Configuration
     PORT: process.env.PORT || 3000,
 
@@ -36,5 +38,27 @@ module.exports = {
     SHIPKLOUD_PUBLIC_KEY: process.env.SHIPKLOUD_PUBLIC_KEY,
     SHIPKLOUD_PRIVATE_KEY: process.env.SHIPKLOUD_PRIVATE_KEY,
     SHIPKLOUD_TRACK_ORDER_URL: process.env.SHIPKLOUD_TRACK_ORDER_URL,
-    
+
+    // COD Charges
+    COD_CHARGES: parseInt(process.env.COD_CHARGES, 10) || 300,
+
+    // AWS S3 Configuration
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+    AWS_REGION: process.env.AWS_REGION || 'ap-south-1',
+    S3_BUCKET_NAME: process.env.S3_BUCKET_NAME,
+    CDN_BASE_URL: process.env.CDN_BASE_URL,
+
+    // Google Maps Configuration
+    GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
+    GOOGLE_MAPS_GEOLOCATION_URL: process.env.GOOGLE_MAPS_GEOLOCATION_URL,
+
+    // Pincode Validation Configuration
+    PINCODE_VALIDATOR_API_URL: process.env.PINCODE_VALIDATOR_API_URL,
+
+    // IP Geolocation API Key (ip-api.com pro key)
+    IP_API_KEY: process.env.IP_API_KEY,
+
+    // Admin Configuration
+    ADMIN_EMAILS: process.env.ADMIN_EMAILS ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim()) : []
 };

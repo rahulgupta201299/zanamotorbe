@@ -14,4 +14,11 @@ router.post('/validate', cartController.validateCart);
 router.post('/apply-coupon', cartController.applyCoupon);
 router.post('/remove-coupon', cartController.removeCoupon);
 
+// Payment method
+router.post('/set-payment-method', cartController.setPaymentMethod);
+
+// Admin routes
+router.get('/admin/active', cartController.getAdminActiveCarts);
+router.get('/admin/active/download', cartController.downloadAdminActiveCartsCsv);
+
 module.exports = router;

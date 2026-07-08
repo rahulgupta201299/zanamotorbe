@@ -3,6 +3,7 @@ const BikeProduct = require('../models/BikeProduct');
 const Coupon = require('../models/Coupon');
 const { getConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
+const { COD_CHARGES } = require('../config/config')
 
 // Helper function to get or create cart
 const getOrCreateCart = async (phoneNumber) => {
@@ -35,11 +36,11 @@ const convertCartPrices = async (cart, currency) => {
     if (!currency || currency === 'INR') {
         // For INR, still add currency info for consistency
         const cartObj = cart.toObject ? cart.toObject() : cart;
-        
+
         const convertedItems = cartObj.items.map((item) => {
             const itemObj = item.toObject ? item.toObject() : item;
             let convertedProduct = itemObj.product;
-            
+
             if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 convertedProduct = {
@@ -67,6 +68,8 @@ const convertCartPrices = async (cart, currency) => {
             originalDiscountAmount: cartObj.discountAmount,
             originalShippingCost: cartObj.shippingCost,
             originalTaxAmount: cartObj.taxAmount,
+            codCharges: cartObj.codCharges || 0,
+            originalCodCharges: cartObj.codCharges || 0,
             originalTotalAmount: cartObj.totalAmount,
             currency: 'INR',
             currencySymbol: inrCurrency ? inrCurrency.symbol : '₹'
@@ -77,11 +80,11 @@ const convertCartPrices = async (cart, currency) => {
     if (!validCurrency) {
         // Return with INR info if currency is invalid
         const cartObj = cart.toObject ? cart.toObject() : cart;
-        
+
         const convertedItems = cartObj.items.map((item) => {
             const itemObj = item.toObject ? item.toObject() : item;
             let convertedProduct = itemObj.product;
-            
+
             if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 convertedProduct = {
@@ -113,7 +116,7 @@ const convertCartPrices = async (cart, currency) => {
             const itemObj = item.toObject ? item.toObject() : item;
             const originalPrice = itemObj.price;
             const originalTotalPrice = itemObj.totalPrice;
-            
+
             const convertedPrice = await getConvertedPrice(originalPrice, currency);
             const convertedTotalPrice = await getConvertedPrice(originalTotalPrice, currency);
 
@@ -123,7 +126,7 @@ const convertCartPrices = async (cart, currency) => {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 const productOriginalPrice = productObj.price;
                 const productConvertedPrice = await getConvertedPrice(productOriginalPrice, currency);
-                
+
                 convertedProduct = {
                     ...productObj,
                     price: productConvertedPrice,
@@ -158,6 +161,8 @@ const convertCartPrices = async (cart, currency) => {
         originalShippingCost: cart.shippingCost,
         taxAmount: await getConvertedPrice(cart.taxAmount, currency),
         originalTaxAmount: cart.taxAmount,
+        codCharges: cart.codCharges ? await getConvertedPrice(cart.codCharges, currency) : 0,
+        originalCodCharges: cart.codCharges || 0,
         totalAmount: await getConvertedPrice(cart.totalAmount, currency),
         originalTotalAmount: cart.totalAmount,
         currency: currency,
@@ -180,7 +185,7 @@ const convertValidationResults = async (results, currency) => {
         // For INR, still add currency info for consistency
         const convertedResults = results.map((result) => {
             let convertedProduct = result.product;
-            
+
             if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 convertedProduct = {
@@ -207,7 +212,7 @@ const convertValidationResults = async (results, currency) => {
         // Return with INR info if currency is invalid
         const convertedResults = results.map((result) => {
             let convertedProduct = result.product;
-            
+
             if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 convertedProduct = {
@@ -231,12 +236,12 @@ const convertValidationResults = async (results, currency) => {
         results.map(async (result) => {
             const convertedPrice = await getConvertedPrice(result.price, currency);
             let convertedProduct = result.product;
-            
+
             if (convertedProduct && typeof convertedProduct === 'object' && convertedProduct._id) {
                 const productObj = convertedProduct.toObject ? convertedProduct.toObject() : convertedProduct;
                 const productOriginalPrice = productObj.price;
                 const productConvertedPrice = await getConvertedPrice(productOriginalPrice, currency);
-                
+
                 convertedProduct = {
                     ...productObj,
                     price: productConvertedPrice,
@@ -309,22 +314,22 @@ exports.validateCart = async (req, res) => {
         const { items, currency } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Items array is required and cannot be empty' 
+            return res.status(400).json({
+                success: false,
+                message: 'Items array is required and cannot be empty'
             });
         }
 
         const validationResults = await validateProductAvailability(items);
-        
+
         // Convert prices based on currency
         const convertedResults = await convertValidationResults(validationResults, currency);
-        
+
         const allValid = convertedResults.every(result => result.isValid);
         const invalidItems = convertedResults.filter(result => !result.isValid);
 
-        res.status(200).json({ 
-            success: true, 
+        res.status(200).json({
+            success: true,
             data: {
                 isValid: allValid,
                 items: convertedResults,
@@ -375,17 +380,17 @@ exports.manageCartItem = async (req, res) => {
         const { phoneNumber, items, currency } = req.body;
 
         if (!phoneNumber) {
-        return res.status(400).json({
-            success: false,
-            message: 'phoneNumber is required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber is required'
+            });
         }
 
         if (!items || !Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({
-            success: false,
-            message: 'items array is required and cannot be empty'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'items array is required and cannot be empty'
+            });
         }
 
         let cart = await getOrCreateCart(phoneNumber);
@@ -502,18 +507,18 @@ exports.manageCartItem = async (req, res) => {
         // Handle coupon validation and recalculation if coupon is already applied
         let couponRemoved = false;
         let couponRemovedMessage = '';
-        
+
         if (cart.appliedCoupon && cart.items.length > 0) {
             // Calculate new subtotal
             const newSubtotal = cart.items.reduce((total, item) => total + item.totalPrice, 0);
-            
+
             // Get the applied coupon details
             const coupon = await Coupon.findById(cart.appliedCoupon);
-            
+
             if (coupon) {
                 // Re-validate coupon eligibility with new subtotal
                 const eligibility = await validateCouponEligibility(coupon, phoneNumber, newSubtotal);
-                
+
                 if (!eligibility.isValid) {
                     // Coupon is no longer applicable, remove it
                     couponRemoved = true;
@@ -579,6 +584,7 @@ exports.manageCartItem = async (req, res) => {
             shippingCost: convertedCart.shippingCost,
             taxAmount: convertedCart.taxAmount,
             discountAmount: convertedCart.discountAmount,
+            codCharges: convertedCart.codCharges,
             totalAmount: convertedCart.totalAmount,
             status: convertedCart.status,
             couponCode: convertedCart.couponCode,
@@ -603,18 +609,18 @@ exports.clearCart = async (req, res) => {
         const { phoneNumber } = req.body;
 
         if (!phoneNumber) {
-        return res.status(400).json({
-            success: false,
-            message: 'phoneNumber is required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber is required'
+            });
         }
 
         const cart = await Cart.findOne({ phoneNumber, status: 'active' });
         if (!cart) {
-        return res.status(404).json({
-            success: false,
-            message: 'Active cart not found'
-        });
+            return res.status(404).json({
+                success: false,
+                message: 'Active cart not found'
+            });
         }
 
         // Delete the cart since it's being cleared (becomes empty)
@@ -644,18 +650,18 @@ exports.updateCartAddresses = async (req, res) => {
         const { phoneNumber, shippingAddress, billingAddress, emailId, shippingAddressSameAsBillingAddress } = req.body;
 
         if (!phoneNumber) {
-        return res.status(400).json({
-            success: false,
-            message: 'phoneNumber is required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber is required'
+            });
         }
 
         const cart = await Cart.findOne({ phoneNumber, status: 'active' });
         if (!cart) {
-        return res.status(404).json({
-            success: false,
-            message: 'Active cart not found'
-        });
+            return res.status(404).json({
+                success: false,
+                message: 'Active cart not found'
+            });
         }
 
         if (shippingAddress) cart.shippingAddress = shippingAddress;
@@ -746,32 +752,32 @@ exports.applyCoupon = async (req, res) => {
         const { phoneNumber, couponCode, currency } = req.body;
 
         if (!phoneNumber) {
-        return res.status(400).json({
-            success: false,
-            message: 'phoneNumber is required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber is required'
+            });
         }
 
         if (!couponCode) {
-        return res.status(400).json({
-            success: false,
-            message: 'couponCode is required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'couponCode is required'
+            });
         }
 
         const cart = await Cart.findOne({ phoneNumber, status: 'active' });
         if (!cart) {
-        return res.status(404).json({
-            success: false,
-            message: 'Active cart not found'
-        });
+            return res.status(404).json({
+                success: false,
+                message: 'Active cart not found'
+            });
         }
 
         if (cart.items.length === 0) {
-        return res.status(400).json({
-            success: false,
-            message: 'Cart is empty'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'Cart is empty'
+            });
         }
 
         // Find coupon
@@ -781,10 +787,10 @@ exports.applyCoupon = async (req, res) => {
         });
 
         if (!coupon) {
-        return res.status(404).json({
-            success: false,
-            message: 'Invalid coupon code'
-        });
+            return res.status(404).json({
+                success: false,
+                message: 'Invalid coupon code'
+            });
         }
 
         // Calculate current subtotal
@@ -819,7 +825,7 @@ exports.applyCoupon = async (req, res) => {
         // Convert prices based on currency (only convert if currency is not INR)
         const shouldConvert = currency && currency !== 'INR';
         const validCurrency = shouldConvert ? currencyList.find(c => c.code === currency) : null;
-        
+
         const responseData = {
             couponCode: coupon.code,
             couponType: coupon.type,
@@ -828,6 +834,7 @@ exports.applyCoupon = async (req, res) => {
             totalAmount: shouldConvert ? await getConvertedPrice(updatedCart.totalAmount, currency) : updatedCart.totalAmount,
             shippingCost: shouldConvert ? await getConvertedPrice(updatedCart.shippingCost, currency) : (updatedCart.shippingCost),
             taxAmount: shouldConvert ? await getConvertedPrice(updatedCart.taxAmount, currency) : (updatedCart.taxAmount),
+            codCharges: shouldConvert ? await getConvertedPrice(updatedCart.codCharges || 0, currency) : (updatedCart.codCharges || 0),
             currency: currency || 'INR',
             currencySymbol: validCurrency ? validCurrency.symbol : '₹'
         };
@@ -848,25 +855,25 @@ exports.removeCoupon = async (req, res) => {
         const { phoneNumber, currency } = req.body;
 
         if (!phoneNumber) {
-        return res.status(400).json({
-            success: false,
-            message: 'phoneNumber is required'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber is required'
+            });
         }
 
         const cart = await Cart.findOne({ phoneNumber, status: 'active' });
         if (!cart) {
-        return res.status(404).json({
-            success: false,
-            message: 'Active cart not found'
-        });
+            return res.status(404).json({
+                success: false,
+                message: 'Active cart not found'
+            });
         }
 
         if (!cart.appliedCoupon) {
-        return res.status(400).json({
-            success: false,
-            message: 'No coupon applied to cart'
-        });
+            return res.status(400).json({
+                success: false,
+                message: 'No coupon applied to cart'
+            });
         }
 
         // Remove coupon
@@ -892,6 +899,7 @@ exports.removeCoupon = async (req, res) => {
                 shippingCost: convertedShippingCost,
                 taxAmount: convertedTaxAmount,
                 discountAmount: 0,
+                codCharges: validCurrency ? await getConvertedPrice(cart.codCharges || 0, currency) : (cart.codCharges || 0),
                 currency: currency || 'INR',
                 currencySymbol: validCurrency ? validCurrency.symbol : '₹'
             }
@@ -901,3 +909,266 @@ exports.removeCoupon = async (req, res) => {
     }
 };
 
+// Set payment method and apply cod charges
+exports.setPaymentMethod = async (req, res) => {
+    try {
+        const { phoneNumber, method, currency } = req.body;
+
+        if (!phoneNumber || !method) {
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber and method are required'
+            });
+        }
+
+        const cart = await Cart.findOne({ phoneNumber, status: 'active' }).populate('items.product');
+        if (!cart) {
+            return res.status(404).json({
+                success: false,
+                message: 'Active cart not found'
+            });
+        }
+
+        if (method === 'cod') {
+            cart.codCharges = COD_CHARGES;
+        } else {
+            cart.codCharges = 0;
+        }
+
+        cart.paymentMethod = method;
+        await cart.save();
+
+        const convertedCart = await convertCartPrices(cart, currency);
+
+        let advanceAmount = 0;
+        if (method === 'cod') {
+            if (cart.totalAmount < 1000) {
+                advanceAmount = 300;
+            } else if (cart.totalAmount >= 1000 && cart.totalAmount < 2000) {
+                advanceAmount = 600;
+            } else {
+                advanceAmount = 1000;
+            }
+        }
+
+        let finalAdvanceAmount = advanceAmount;
+        if (currency && currency !== 'INR') {
+            finalAdvanceAmount = await getConvertedPrice(advanceAmount, currency);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Payment method updated successfully',
+            data: {
+                ...convertedCart,
+                advanceAmount: finalAdvanceAmount,
+                originalAdvanceAmount: advanceAmount
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Get all active carts for admin with filtering and pagination
+exports.getAdminActiveCarts = async (req, res) => {
+    try {
+        const { minAmount, maxAmount, startDate, endDate, phoneNumber, emailId, sortBy = 'updatedAt', sortOrder = 'desc', page = 1, limit = 10 } = req.query;
+
+        // Validate sortBy field
+        const allowedSortFields = ['totalAmount', 'updatedAt'];
+        if (sortBy && !allowedSortFields.includes(sortBy)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid sortBy field. Allowed fields: ${allowedSortFields.join(', ')}`
+            });
+        }
+
+        // Validate sortOrder
+        if (sortOrder && !['asc', 'desc'].includes(sortOrder.toLowerCase())) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid sortOrder. Use "asc" or "desc"'
+            });
+        }
+
+        const query = { status: 'active' };
+
+        if (minAmount || maxAmount) {
+            query.totalAmount = {};
+            if (minAmount) query.totalAmount.$gte = parseFloat(minAmount);
+            if (maxAmount) query.totalAmount.$lte = parseFloat(maxAmount);
+        }
+
+        // Date filters (handling IST offset +5:30)
+        if (startDate || endDate) {
+            query.updatedAt = {};
+            if (startDate) query.updatedAt.$gte = new Date(`${startDate}T00:00:00+05:30`);
+            if (endDate) query.updatedAt.$lte = new Date(`${endDate}T23:59:59.999+05:30`);
+        }
+
+        // Additional filters
+        if (phoneNumber) {
+            query.phoneNumber = phoneNumber;
+        }
+
+        if (emailId) {
+            query.emailId = emailId;
+        }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const sort = {};
+        sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+        const totalCarts = await Cart.countDocuments(query);
+        const carts = await Cart.find(query)
+            .populate('items.product')
+            .sort(sort)
+            .skip(skip)
+            .limit(parseInt(limit));
+
+        // Map carts to object if needed (convertCartPrices was doing this plus conversion)
+        // Since we removed currency, we just return the carts as is or populate them.
+        const cartData = carts.map(cart => cart.toObject ? cart.toObject() : cart);
+
+        const totalPages = Math.ceil(totalCarts / limit);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                carts: cartData,
+                pagination: {
+                    totalCarts,
+                    totalPages,
+                    currentPage: parseInt(page),
+                    limit: parseInt(limit),
+                    hasNextPage: parseInt(page) < totalPages,
+                    hasPrevPage: parseInt(page) > 1
+                }
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Download active carts as CSV
+exports.downloadAdminActiveCartsCsv = async (req, res) => {
+    try {
+        const { minAmount, maxAmount, startDate, endDate, phoneNumber, emailId, sortBy = 'updatedAt', sortOrder = 'desc' } = req.query;
+
+        // Same query construction as getAdminActiveCarts
+        const query = { status: 'active' };
+
+        if (minAmount || maxAmount) {
+            query.totalAmount = {};
+            if (minAmount) query.totalAmount.$gte = parseFloat(minAmount);
+            if (maxAmount) query.totalAmount.$lte = parseFloat(maxAmount);
+        }
+
+        // Date filters (handling IST offset +5:30)
+        if (startDate || endDate) {
+            query.updatedAt = {};
+            if (startDate) query.updatedAt.$gte = new Date(`${startDate}T00:00:00+05:30`);
+            if (endDate) query.updatedAt.$lte = new Date(`${endDate}T23:59:59.999+05:30`);
+        }
+
+        // Additional filters
+        if (phoneNumber) {
+            query.phoneNumber = phoneNumber;
+        }
+
+        if (emailId) {
+            query.emailId = emailId;
+        }
+
+        const sort = {};
+        sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+        const carts = await Cart.find(query)
+            .populate('items.product')
+            .sort(sort);
+
+        // Build CSV content
+        const headers = [
+            'Cart ID',
+            'Phone Number',
+            'Email ID',
+            'Product Codes',
+            'Product Names',
+            'Quantities',
+            'Unit Prices',
+            'Subtotal',
+            'Discount Amount',
+            'COD Charges',
+            'Total Amount',
+            'Coupon Code',
+            'Razorpay Order ID',
+            'Shipping Address',
+            'Billing Address',
+            'Created At',
+            'Updated At'
+        ];
+
+        const escapeCSV = (val) => {
+            if (val === null || val === undefined) return '';
+            let str = String(val);
+            if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+                return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+        };
+
+        const formatAddress = (addr) => {
+            if (!addr) return '';
+            const parts = [
+                addr.fullName,
+                addr.phone ? `Phone: ${addr.phone}` : '',
+                addr.addressLine1,
+                addr.addressLine2,
+                addr.city,
+                addr.state,
+                addr.postalCode,
+                addr.country
+            ].filter(Boolean);
+            return parts.join(', ');
+        };
+
+        const rows = carts.map(cart => {
+            const productCodes = cart.items.map(item => item.product ? item.product.productCode || 'N/A' : 'N/A').join(' | ');
+            const productNames = cart.items.map(item => item.product ? item.product.name : 'Unknown Product').join(' | ');
+            const quantities = cart.items.map(item => item.quantity).join(' | ');
+            const unitPrices = cart.items.map(item => item.price).join(' | ');
+
+            return [
+                cart._id,
+                cart.phoneNumber,
+                cart.emailId || '',
+                productCodes,
+                productNames,
+                quantities,
+                unitPrices,
+                cart.subtotal,
+                cart.discountAmount,
+                cart.codCharges || 0,
+                cart.totalAmount,
+                cart.couponCode || '',
+                cart.razorpayOrderId || '',
+                formatAddress(cart.shippingAddress),
+                formatAddress(cart.billingAddress),
+                cart.createdAt.toISOString(),
+                cart.updatedAt.toISOString()
+            ].map(escapeCSV).join(',');
+        });
+
+        const csvContent = [headers.join(','), ...rows].join('\n');
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="active_carts.csv"');
+        res.status(200).send(csvContent);
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
