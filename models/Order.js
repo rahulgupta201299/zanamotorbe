@@ -132,7 +132,13 @@ const orderSchema = new mongoose.Schema({
     },
     paymentMethod: {
         type: String,
-        enum: ['card', 'upi', 'netbanking', 'cod', 'wallet', 'online'],
+        enum: ['cod', 'online'],
+        required: true
+    },
+    paymentType: {
+        type: String,
+        enum: ['razorpay', 'upi'],
+        default: "razorpay",
         required: true
     },
     paymentStatus: {
@@ -153,6 +159,9 @@ const orderSchema = new mongoose.Schema({
         type: String
     },
     razorpaySignature: {
+        type: String
+    },
+    adminCapturedPaymentId: {
         type: String
     },
     orderStatus: {
@@ -185,6 +194,10 @@ const orderSchema = new mongoose.Schema({
     },
     notes: {
         type: String
+    },
+    isAdminCreated: {
+        type: Boolean,
+        default: false
     },
     // Original cart reference
     originalCartId: {
