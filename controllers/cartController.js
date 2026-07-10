@@ -1172,3 +1172,69 @@ exports.downloadAdminActiveCartsCsv = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// Store / update UTM parameters on the active cart
+exports.updateCartUtmParams = async (req, res) => {
+    try {
+        const {
+            phoneNumber,
+            utm_source,
+            utm_medium,
+            utm_campaign,
+            utm_term,
+            utm_content
+        } = req.body;
+
+        if (!phoneNumber) {
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber is required'
+            });
+        }
+
+        const utmFieldsProvided = [utm_source, utm_medium, utm_campaign, utm_term, utm_content]
+            .some(v => v !== undefined);
+
+        if (!utmFieldsProvided) {
+            return res.status(400).json({
+                success: false,
+                message: 'At least one UTM parameter (utm_source, utm_medium, utm_campaign, utm_term, utm_content) is required'
+            });
+        }
+
+        // Get or create the active cart
+        let cart = await Cart.findOne({ phoneNumber, status: 'active' });
+        if (!cart) {
+            cart = new Cart({
+                phoneNumber,
+                items: [],
+                status: 'active'
+            });
+        }
+
+        // Merge: only overwrite keys that were explicitly provided in the request
+        if (!cart.utmParams) {
+            cart.utmParams = {};
+        }
+        if (utm_source   !== undefined) cart.utmParams.utm_source   = utm_source;
+        if (utm_medium   !== undefined) cart.utmParams.utm_medium   = utm_medium;
+        if (utm_campaign !== undefined) cart.utmParams.utm_campaign = utm_campaign;
+        if (utm_term     !== undefined) cart.utmParams.utm_term     = utm_term;
+        if (utm_content  !== undefined) cart.utmParams.utm_content  = utm_content;
+
+        // Mark the nested object as modified so Mongoose persists it
+        cart.markModified('utmParams');
+
+        await cart.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'UTM parameters saved successfully',
+            data: {
+                utmParams: cart.utmParams
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

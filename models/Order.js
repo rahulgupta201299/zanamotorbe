@@ -199,6 +199,31 @@ const orderSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    salesPersonName: {
+        type: String
+    },
+    utmParams: {
+        utm_source: {
+            type: String,
+            default: null
+        },
+        utm_medium: {
+            type: String,
+            default: null
+        },
+        utm_campaign: {
+            type: String,
+            default: null
+        },
+        utm_term: {
+            type: String,
+            default: null
+        },
+        utm_content: {
+            type: String,
+            default: null
+        }
+    },
     // Original cart reference
     originalCartId: {
         type: mongoose.Schema.Types.ObjectId,

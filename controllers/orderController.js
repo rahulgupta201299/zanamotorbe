@@ -646,7 +646,8 @@ exports.adminCreateOrder = async (req, res) => {
             paymentMethod,
             paymentType,
             paymentStatus,
-            adminCapturedPaymentId
+            adminCapturedPaymentId,
+            salesPersonName
         } = req.body;
 
         if (!phoneNumber) {
@@ -763,6 +764,7 @@ exports.adminCreateOrder = async (req, res) => {
             logisticsAWBNumber: null,
             adminCapturedPaymentId: adminCapturedPaymentId,
             orderDate: new Date(),
+            salesPersonName: salesPersonName || null,
             isAdminCreated: true
         });
 
