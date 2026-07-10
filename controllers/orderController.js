@@ -459,12 +459,15 @@ exports.downloadAdminAllOrdersCsv = async (req, res) => {
             'Total Amount',
             'Payment Method',
             'Payment Status',
+            'Payment Type',
             'Order Status',
             'Coupon Code',
             'Razorpay Order ID',
             'Razorpay Payment ID',
+            'Admin Captured Payment ID',
             'Shipping Address',
             'Billing Address',
+            'Order Created By Admin',
             'Order Date'
         ];
 
@@ -513,12 +516,15 @@ exports.downloadAdminAllOrdersCsv = async (req, res) => {
                 order.totalAmount,
                 order.paymentMethod,
                 order.paymentStatus,
+                order.paymentType,
                 order.orderStatus,
                 order.couponCode || '',
                 order.razorpayOrderId || '',
                 order.razorpayPaymentId || '',
+                order.adminCapturedPaymentId || '',
                 formatAddress(order.shippingAddress),
                 formatAddress(order.billingAddress),
+                order.isAdminCreated,
                 order.orderDate.toISOString()
             ].map(escapeCSV).join(',');
         });
@@ -530,5 +536,376 @@ exports.downloadAdminAllOrdersCsv = async (req, res) => {
         res.status(200).send(csvContent);
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const validateAddress = (address, fieldName) => {
+    if (!address || typeof address !== 'object' || Array.isArray(address)) {
+        return `${fieldName} must be a valid object`;
+    }
+
+    const requiredStringFields = ['fullName', 'phone', 'addressLine1', 'city', 'state', 'postalCode', 'country'];
+    for (const field of requiredStringFields) {
+        const value = address[field];
+        if (value === undefined || value === null || value === '') {
+            return `${fieldName}.${field} is required`;
+        }
+        if (typeof value !== 'string') {
+            return `${fieldName}.${field} must be a string`;
+        }
+        if (value.trim() === '') {
+            return `${fieldName}.${field} must not be blank`;
+        }
+    }
+
+    if (address.addressLine2 !== undefined && address.addressLine2 !== null) {
+        if (typeof address.addressLine2 !== 'string') {
+            return `${fieldName}.addressLine2 must be a string`;
+        }
+    }
+
+    return null;
+};
+
+const validateItems = (items) => {
+    const mongoose = require('mongoose');
+
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const prefix = `items[${i}]`;
+
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+            return `${prefix} must be a valid object`;
+        }
+
+        // product (required, valid ObjectId)
+        if (item.product === undefined || item.product === null || item.product === '') {
+            return `${prefix}.product is required`;
+        }
+        if (!mongoose.Types.ObjectId.isValid(item.product)) {
+            return `${prefix}.product must be a valid MongoDB ObjectId`;
+        }
+
+        // quantity (required, positive integer)
+        if (item.quantity === undefined || item.quantity === null) {
+            return `${prefix}.quantity is required`;
+        }
+        if (typeof item.quantity !== 'number' || !Number.isFinite(item.quantity)) {
+            return `${prefix}.quantity must be a number`;
+        }
+        if (item.quantity <= 0) {
+            return `${prefix}.quantity must be greater than 0`;
+        }
+        if (!Number.isInteger(item.quantity)) {
+            return `${prefix}.quantity must be a whole number (integer)`;
+        }
+
+        // price (required, non-negative number)
+        if (item.price === undefined || item.price === null) {
+            return `${prefix}.price is required`;
+        }
+        if (typeof item.price !== 'number' || !Number.isFinite(item.price)) {
+            return `${prefix}.price must be a number`;
+        }
+        if (item.price < 0) {
+            return `${prefix}.price must be 0 or greater`;
+        }
+
+        // totalPrice (required, non-negative number)
+        if (item.totalPrice === undefined || item.totalPrice === null) {
+            return `${prefix}.totalPrice is required`;
+        }
+        if (typeof item.totalPrice !== 'number' || !Number.isFinite(item.totalPrice)) {
+            return `${prefix}.totalPrice must be a number`;
+        }
+        if (item.totalPrice < 0) {
+            return `${prefix}.totalPrice must be 0 or greater`;
+        }
+    }
+
+    return null; // valid
+};
+
+exports.adminCreateOrder = async (req, res) => {
+    try {
+        const {
+            phoneNumber,
+            emailId,
+            items,
+            shippingAddress,
+            billingAddress,
+            shippingAddressSameAsBillingAddress,
+            subtotal,
+            discountAmount,
+            codCharges,
+            advancePaid,
+            couponCode,
+            totalAmount,
+            currency,
+            currencySymbol,
+            paymentMethod,
+            paymentType,
+            paymentStatus,
+            adminCapturedPaymentId,
+            salesPersonName
+        } = req.body;
+
+        if (!phoneNumber) {
+            return res.status(400).json({ success: false, message: 'phoneNumber is required' });
+        }
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ success: false, message: 'items array is required and must not be empty' });
+        }
+        if (!shippingAddress) {
+            return res.status(400).json({ success: false, message: 'shippingAddress is required' });
+        }
+        if (!billingAddress) {
+            return res.status(400).json({ success: false, message: 'billingAddress is required' });
+        }
+        
+        if (subtotal === undefined || subtotal === null) {
+            return res.status(400).json({ success: false, message: 'subtotal is required' });
+        }
+        if (typeof subtotal !== 'number' || !Number.isFinite(subtotal) || subtotal < 0) {
+            return res.status(400).json({ success: false, message: 'subtotal must be a non-negative number' });
+        }
+        
+        if (totalAmount === undefined || totalAmount === null) {
+            return res.status(400).json({ success: false, message: 'totalAmount is required' });
+        }
+        if (typeof totalAmount !== 'number' || !Number.isFinite(totalAmount) || totalAmount < 0) {
+            return res.status(400).json({ success: false, message: 'totalAmount must be a non-negative number' });
+        }
+        
+        if (!paymentMethod) {
+            return res.status(400).json({ success: false, message: 'paymentMethod is required' });
+        }
+
+        if (!paymentType) {
+            return res.status(400).json({ success: false, message: 'paymentType is required' });
+        }
+
+        // ── Validate paymentMethod enum ────────────────────────────────────
+        const validPaymentMethods = ['cod', 'online'];
+        if (!validPaymentMethods.includes(paymentMethod)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid paymentMethod. Allowed values: ${validPaymentMethods.join(', ')}`
+            });
+        }
+
+        const validPaymentTypes = ['razorpay', 'upi'];
+        if (!validPaymentTypes.includes(paymentType)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid paymentType. Allowed values: ${validPaymentTypes.join(', ')}`
+            });
+        }
+
+        // ── Validate paymentStatus enum (if provided) ─────────────────────
+        const validPaymentStatuses = ['pending', 'partial_paid', 'paid', 'failed', 'refunded'];
+        if (paymentStatus && !validPaymentStatuses.includes(paymentStatus)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid paymentStatus. Allowed values: ${validPaymentStatuses.join(', ')}`
+            });
+        }
+
+        // ── Deep-validate shippingAddress ──────────────────────────────────
+        const shippingAddressError = validateAddress(shippingAddress, 'shippingAddress');
+        if (shippingAddressError) {
+            return res.status(400).json({ success: false, message: shippingAddressError });
+        }
+
+        // ── Deep-validate billingAddress ───────────────────────────────────
+        const billingAddressError = validateAddress(billingAddress, 'billingAddress');
+        if (billingAddressError) {
+            return res.status(400).json({ success: false, message: billingAddressError });
+        }
+
+        // ── Deep-validate items array ──────────────────────────────────────
+        const itemsError = validateItems(items);
+        if (itemsError) {
+            return res.status(400).json({ success: false, message: itemsError });
+        }
+
+        // ── Generate unique order number ───────────────────────────────────
+        const orderNumber = `ORD-ADM-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+
+        const order = new Order({
+            orderNumber,
+            phoneNumber,
+            emailId,
+            items,
+            shippingAddress,
+            billingAddress,
+            shippingAddressSameAsBillingAddress: shippingAddressSameAsBillingAddress || false,
+            subtotal,
+            shippingCost: 0,
+            taxAmount: 0,
+            discountAmount: discountAmount || 0,
+            codCharges: codCharges || 0,
+            advancePaid: advancePaid || 0,
+            couponCode: couponCode || null,
+            totalAmount,
+            currency: currency || 'INR',
+            currencySymbol: currencySymbol || '₹',
+            paymentMethod,
+            paymentStatus: paymentStatus || 'pending',
+            paymentType: paymentType || 'razorpay',
+            orderStatus: 'placed',
+            statusHistory: [{
+                status: 'placed',
+                timestamp: new Date(),
+                notes: 'Order created by admin'
+            }],
+            logisticsOrderId: null,
+            logisticsReferenceId: null,
+            logisticsAWBNumber: null,
+            adminCapturedPaymentId: adminCapturedPaymentId,
+            orderDate: new Date(),
+            salesPersonName: salesPersonName || null,
+            isAdminCreated: true
+        });
+
+        await order.save();
+
+        return res.status(201).json({
+            success: true,
+            message: 'Order created successfully by admin',
+            data: order
+        });
+
+    } catch (error) {
+        console.error('Error in adminCreateOrder:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.adminUpdateOrder = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+
+        const order = await Order.findById(orderId);
+
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        // ── Guard: only admin-created orders can be updated via this endpoint
+        if (!order.isAdminCreated) {
+            return res.status(403).json({
+                success: false,
+                message: 'This order was not created by admin and cannot be updated via this endpoint'
+            });
+        }
+
+        // ── Strip fields that must never be updated ────────────────────────
+        const {
+            phoneNumber,      // explicitly blocked
+            orderNumber,      // immutable
+            _id,              // immutable
+            __v,              // internal
+            createdAt,        // immutable
+            isAdminCreated,   // should not be toggled via update
+            ...allowedUpdates
+        } = req.body;
+
+        // Warn the caller if they tried to change phoneNumber
+        if (phoneNumber !== undefined) {
+            return res.status(400).json({
+                success: false,
+                message: 'phoneNumber cannot be updated'
+            });
+        }
+
+        // ── Validate enums if they are being updated ───────────────────────
+        const validPaymentMethods = ['cod', 'online'];
+        if (allowedUpdates.paymentMethod && !validPaymentMethods.includes(allowedUpdates.paymentMethod)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid paymentMethod. Allowed values: ${validPaymentMethods.join(', ')}`
+            });
+        }
+
+        const validOrderStatuses = ['pending', 'placed', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'];
+        if (allowedUpdates.orderStatus && !validOrderStatuses.includes(allowedUpdates.orderStatus)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid orderStatus. Allowed values: ${validOrderStatuses.join(', ')}`
+            });
+        }
+
+        const validPaymentTypes = ['razorpay', 'upi'];
+        if (allowedUpdates.paymentMethod && !validPaymentTypes.includes(allowedUpdates.paymentType)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid paymentType. Allowed values: ${validPaymentTypes.join(', ')}`
+            });
+        }
+
+        const validPaymentStatuses = ['pending', 'partial_paid', 'paid', 'failed', 'refunded'];
+        if (allowedUpdates.paymentStatus && !validPaymentStatuses.includes(allowedUpdates.paymentStatus)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid paymentStatus. Allowed values: ${validPaymentStatuses.join(', ')}`
+            });
+        }
+
+        // ── Deep-validate shippingAddress if provided ──────────────────────
+        if (allowedUpdates.shippingAddress !== undefined) {
+            const shippingAddressError = validateAddress(allowedUpdates.shippingAddress, 'shippingAddress');
+            if (shippingAddressError) {
+                return res.status(400).json({ success: false, message: shippingAddressError });
+            }
+        }
+
+        // ── Deep-validate billingAddress if provided ───────────────────────
+        if (allowedUpdates.billingAddress !== undefined) {
+            const billingAddressError = validateAddress(allowedUpdates.billingAddress, 'billingAddress');
+            if (billingAddressError) {
+                return res.status(400).json({ success: false, message: billingAddressError });
+            }
+        }
+
+        // ── Deep-validate items if provided ───────────────────────────────
+        if (allowedUpdates.items !== undefined) {
+            if (!Array.isArray(allowedUpdates.items) || allowedUpdates.items.length === 0) {
+                return res.status(400).json({ success: false, message: 'items must be a non-empty array' });
+            }
+            const itemsError = validateItems(allowedUpdates.items);
+            if (itemsError) {
+                return res.status(400).json({ success: false, message: itemsError });
+            }
+        }
+
+        // ── If orderStatus is changing, append to statusHistory ────────────
+        if (allowedUpdates.orderStatus && allowedUpdates.orderStatus !== order.orderStatus) {
+            const historyEntry = {
+                status: allowedUpdates.orderStatus,
+                timestamp: new Date(),
+                notes: allowedUpdates.statusNote || `Order status updated by admin to ${allowedUpdates.orderStatus}`
+            };
+            order.statusHistory.push(historyEntry);
+        }
+
+        // Remove statusNote from updates (it's only used for history entry, not a schema field)
+        delete allowedUpdates.statusNote;
+
+        // ── Apply updates ──────────────────────────────────────────────────
+        Object.assign(order, allowedUpdates);
+        order.updatedAt = new Date();
+
+        await order.save();
+
+        return res.status(200).json({
+            success: true,
+            message: 'Admin-created order updated successfully',
+            data: order
+        });
+
+    } catch (error) {
+        console.error('Error in adminUpdateOrder:', error);
+        return res.status(500).json({ success: false, message: error.message });
     }
 };

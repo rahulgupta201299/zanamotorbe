@@ -128,6 +128,7 @@ exports.createCODOrder = async (req, res) => {
             order.paymentLinkId = null;
             order.paymentShortUrl = null;
             order.orderDate = new Date();
+            order.utmParams = cart.utmParams || null;
         } else {
             order = new Order({
                 orderNumber: finalOrderNumber,
@@ -156,7 +157,8 @@ exports.createCODOrder = async (req, res) => {
                     notes: 'COD order created, awaiting advance payment'
                 }],
                 orderDate: new Date(),
-                originalCartId: cart._id
+                originalCartId: cart._id,
+                utmParams: cart.utmParams || null
             });
         }
 
@@ -512,6 +514,7 @@ exports.createOrder = async (req, res) => {
             order.paymentLinkId = null;
             order.paymentShortUrl = null;
             order.orderDate = new Date(); // Update date to reflect latest attempt
+            order.utmParams = cart.utmParams || null;
 
             // Note: razorpayOrderId might need to be recreated if amount changed
         } else {
@@ -541,7 +544,8 @@ exports.createOrder = async (req, res) => {
                     notes: 'Order created, awaiting payment confirmation'
                 }],
                 orderDate: new Date(),
-                originalCartId: cart._id
+                originalCartId: cart._id,
+                utmParams: cart.utmParams || null
             });
         }
 
@@ -1192,6 +1196,7 @@ exports.createPaymentLink = async (req, res) => {
             order.currency = 'INR';
             order.currencySymbol = '₹';
             order.orderDate = new Date();
+            order.utmParams = cart.utmParams || null;
         } else {
             // Create a new pending order
             order = new Order({
@@ -1219,7 +1224,8 @@ exports.createPaymentLink = async (req, res) => {
                     notes: 'Order created, awaiting payment link confirmation'
                 }],
                 orderDate: new Date(),
-                originalCartId: cart._id
+                originalCartId: cart._id,
+                utmParams: cart.utmParams || null
             });
         }
 

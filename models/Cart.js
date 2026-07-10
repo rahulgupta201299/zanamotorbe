@@ -103,6 +103,29 @@ const cartSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    // UTM attribution parameters
+    utmParams: {
+        utm_source: {
+            type: String,
+            default: null
+        },
+        utm_medium: {
+            type: String,
+            default: null
+        },
+        utm_campaign: {
+            type: String,
+            default: null
+        },
+        utm_term: {
+            type: String,
+            default: null
+        },
+        utm_content: {
+            type: String,
+            default: null
+        }
+    },
     // Payment-related fields (set before checkout)
     orderId: {
         type: mongoose.Schema.Types.ObjectId,
