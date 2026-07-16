@@ -11,6 +11,8 @@ const productUploadFields = [
 
 router.post('/', upload.fields(productUploadFields), productController.createProduct);
 router.get('/all', productController.getAllProductsPaginated);
+router.get('/landing/bike-specific', productController.getLandingBikeSpecificProducts);
+router.get('/landing/universal', productController.getLandingUniversalProducts);
 router.get('/search', productController.searchProducts);
 router.get('/categories/count', productController.getCategoryCounts);
 router.get('/garage-favorite', productController.getGarageFavorites);

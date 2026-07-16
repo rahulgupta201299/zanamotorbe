@@ -1,6 +1,7 @@
 const BikeProduct = require('../models/BikeProduct');
 const BikeModel = require('../models/BikeModel');
 const Wishlist = require('../models/Wishlist');
+const Metadata = require('../models/Metadata');
 const { getConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
 const mongoose = require('mongoose');
@@ -771,6 +772,30 @@ exports.deleteProduct = async (req, res) => {
         }
 
         res.status(200).json({ success: true, data: { message: 'Product deleted successfully' } });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getLandingBikeSpecificProducts = async (req, res) => {
+    try {
+        const metadata = await Metadata.findOne({ isBikeSpecific: true });
+        if (!metadata) {
+            return res.status(404).json({ success: false, message: 'Data not found' });
+        }
+        res.status(200).json({ success: true, data: metadata.products });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getLandingUniversalProducts = async (req, res) => {
+    try {
+        const metadata = await Metadata.findOne({ isBikeSpecific: false });
+        if (!metadata) {
+            return res.status(404).json({ success: false, message: 'Data not found' });
+        }
+        res.status(200).json({ success: true, data: metadata.products });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
