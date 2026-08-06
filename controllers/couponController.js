@@ -58,15 +58,16 @@ exports.getAllCoupons = async (req, res) => {
         const total = await Coupon.countDocuments(query);
 
         // Currency handling
+        const shouldConvert = currency && currency !== 'INR';
         const validCurrency = currency ? currencyList.find(c => c.code === currency) : null;
         const currencySymbol = validCurrency ? validCurrency.symbol : '₹';
         const currencyCode = currency || 'INR';
 
         // Convert coupon values if currency is provided
         const convertedCoupons = await Promise.all(coupons.map(async (coupon) => {
-            const convertedDiscount = validCurrency ? await getConvertedPrice(coupon.discount, currency) : coupon.discount;
-            const convertedMaxDiscount = coupon.maxDiscount ? (validCurrency ? await getConvertedPrice(coupon.maxDiscount, currency) : coupon.maxDiscount) : null;
-            const convertedMinCartAmount = validCurrency ? await getConvertedPrice(coupon.minCartAmount, currency) : coupon.minCartAmount;
+            const convertedDiscount = (shouldConvert && validCurrency && coupon.type !== 'Percentage') ? await getConvertedPrice(coupon.discount, currency) : coupon.discount;
+            const convertedMaxDiscount = coupon.maxDiscount ? ((shouldConvert && validCurrency) ? await getConvertedPrice(coupon.maxDiscount, currency) : coupon.maxDiscount) : null;
+            const convertedMinCartAmount = (shouldConvert && validCurrency) ? await getConvertedPrice(coupon.minCartAmount, currency) : coupon.minCartAmount;
 
             return {
                 ...coupon.toObject(),
@@ -330,11 +331,12 @@ exports.validateCouponCode = async (req, res) => {
 
         // Check if valid currency
         const validCurrency = currency ? currencyList.find(c => c.code === currency) : null;
+        const shouldConvert = currency && currency !== 'INR';
         
         // Convert coupon values based on currency
-        const convertedDiscount = validCurrency ? await getConvertedPrice(coupon.discount, currency) : coupon.discount;
-        const convertedMaxDiscount = coupon.maxDiscount ? (validCurrency ? await getConvertedPrice(coupon.maxDiscount, currency) : coupon.maxDiscount) : null;
-        const convertedMinCartAmount = validCurrency ? await getConvertedPrice(coupon.minCartAmount, currency) : coupon.minCartAmount;
+        const convertedDiscount = (shouldConvert && validCurrency && coupon.type !== 'Percentage') ? await getConvertedPrice(coupon.discount, currency) : coupon.discount;
+        const convertedMaxDiscount = coupon.maxDiscount ? ((shouldConvert && validCurrency) ? await getConvertedPrice(coupon.maxDiscount, currency) : coupon.maxDiscount) : null;
+        const convertedMinCartAmount = (shouldConvert && validCurrency) ? await getConvertedPrice(coupon.minCartAmount, currency) : coupon.minCartAmount;
 
         // Basic validation
         const validation = {
