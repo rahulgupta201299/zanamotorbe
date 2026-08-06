@@ -1,4 +1,5 @@
 const Order = require('../models/Order');
+const Cart = require('../models/Cart');
 const { getConvertedPrice } = require('../utils/exchangeRate');
 const currencyList = require('../utils/currencyList');
 const { SHIPKLOUD_PUBLIC_KEY, SHIPKLOUD_PRIVATE_KEY, SHIPKLOUD_TRACK_ORDER_URL } = require('../config/config')
@@ -769,6 +770,13 @@ exports.adminCreateOrder = async (req, res) => {
         });
 
         await order.save();
+
+        // Clear cart if it exists for the phone number
+        try {
+            await Cart.findOneAndDelete({ phoneNumber });
+        } catch (cartError) {
+            console.error(`Error deleting cart for phoneNumber ${phoneNumber}:`, cartError);
+        }
 
         return res.status(201).json({
             success: true,

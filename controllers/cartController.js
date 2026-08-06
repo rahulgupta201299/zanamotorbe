@@ -716,9 +716,9 @@ const calculateDiscount = (coupon, subtotal) => {
 // Helper function to validate coupon eligibility
 const validateCouponEligibility = async (coupon, phoneNumber, subtotal) => {
     // Check if coupon is active
-    if (!coupon.isActive) {
-        return { isValid: false, message: 'Coupon is not active' };
-    }
+    // if (!coupon.isActive) {
+    //     return { isValid: false, message: 'Coupon is not active' };
+    // }
 
     // Check expiration
     if (coupon.expiresAt && new Date() > coupon.expiresAt) {
@@ -782,8 +782,7 @@ exports.applyCoupon = async (req, res) => {
 
         // Find coupon
         const coupon = await Coupon.findOne({
-            code: couponCode,
-            isActive: true
+            code: couponCode
         });
 
         if (!coupon) {
