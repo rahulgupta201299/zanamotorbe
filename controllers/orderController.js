@@ -249,37 +249,73 @@ exports.getAdminOrderStats = async (req, res) => {
             {
                 $group: {
                     _id: null,
-                    onlineCount: {
+                    organicOnlineCount: {
                         $sum: {
                             $cond: [
-                                { $and: [ { $ne: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "paid"] } ] },
+                                { $and: [ { $ne: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "paid"] }, { $ne: ["$isAdminCreated", true] } ] },
                                 1,
                                 0
                             ]
                         }
                     },
-                    onlineTotalAmount: {
+                    organicOnlineTotalAmount: {
                         $sum: {
                             $cond: [
-                                { $and: [ { $ne: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "paid"] } ] },
+                                { $and: [ { $ne: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "paid"] }, { $ne: ["$isAdminCreated", true] } ] },
                                 "$totalAmount",
                                 0
                             ]
                         }
                     },
-                    codCount: {
+                    organicCodCount: {
                         $sum: {
                             $cond: [
-                                { $and: [ { $eq: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "partial_paid"] } ] },
+                                { $and: [ { $eq: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "partial_paid"] }, { $ne: ["$isAdminCreated", true] } ] },
                                 1,
                                 0
                             ]
                         }
                     },
-                    codTotalAmount: {
+                    organicCodTotalAmount: {
                         $sum: {
                             $cond: [
-                                { $and: [ { $eq: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "partial_paid"] } ] },
+                                { $and: [ { $eq: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "partial_paid"] }, { $ne: ["$isAdminCreated", true] } ] },
+                                "$totalAmount",
+                                0
+                            ]
+                        }
+                    },
+                    adminOnlineCount: {
+                        $sum: {
+                            $cond: [
+                                { $and: [ { $ne: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "paid"] }, { $eq: ["$isAdminCreated", true] } ] },
+                                1,
+                                0
+                            ]
+                        }
+                    },
+                    adminOnlineTotalAmount: {
+                        $sum: {
+                            $cond: [
+                                { $and: [ { $ne: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "paid"] }, { $eq: ["$isAdminCreated", true] } ] },
+                                "$totalAmount",
+                                0
+                            ]
+                        }
+                    },
+                    adminCodCount: {
+                        $sum: {
+                            $cond: [
+                                { $and: [ { $eq: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "partial_paid"] }, { $eq: ["$isAdminCreated", true] } ] },
+                                1,
+                                0
+                            ]
+                        }
+                    },
+                    adminCodTotalAmount: {
+                        $sum: {
+                            $cond: [
+                                { $and: [ { $eq: ["$paymentMethod", "cod"] }, { $eq: ["$paymentStatus", "partial_paid"] }, { $eq: ["$isAdminCreated", true] } ] },
                                 "$totalAmount",
                                 0
                             ]
@@ -290,26 +326,38 @@ exports.getAdminOrderStats = async (req, res) => {
         ]);
 
         const result = stats.length > 0 ? stats[0] : {
-            onlineCount: 0,
-            onlineTotalAmount: 0,
-            codCount: 0,
-            codTotalAmount: 0
+            organicOnlineCount: 0,
+            organicOnlineTotalAmount: 0,
+            organicCodCount: 0,
+            organicCodTotalAmount: 0,
+            adminOnlineCount: 0,
+            adminOnlineTotalAmount: 0,
+            adminCodCount: 0,
+            adminCodTotalAmount: 0
         };
 
         res.status(200).json({
             success: true,
             data: {
-                online: {
-                    count: result.onlineCount,
-                    totalAmount: result.onlineTotalAmount
+                organicOnline: {
+                    count: result.organicOnlineCount,
+                    totalAmount: result.organicOnlineTotalAmount
                 },
-                cod: {
-                    count: result.codCount,
-                    totalAmount: result.codTotalAmount
+                organicCod: {
+                    count: result.organicCodCount,
+                    totalAmount: result.organicCodTotalAmount
+                },
+                adminOnline: {
+                    count: result.adminOnlineCount,
+                    totalAmount: result.adminOnlineTotalAmount
+                },
+                adminCod: {
+                    count: result.adminCodCount,
+                    totalAmount: result.adminCodTotalAmount
                 },
                 overall: {
-                    count: result.onlineCount + result.codCount,
-                    totalAmount: result.onlineTotalAmount + result.codTotalAmount
+                    count: result.organicOnlineCount + result.organicCodCount + result.adminOnlineCount + result.adminCodCount,
+                    totalAmount: result.organicOnlineTotalAmount + result.organicCodTotalAmount + result.adminOnlineTotalAmount + result.adminCodTotalAmount
                 }
             }
         });
