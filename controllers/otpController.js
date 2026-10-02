@@ -630,6 +630,14 @@ exports.handleInteraktWebhook = async (req, res) => {
             return;
         }
 
+        // If fallback SMS is disabled for this notification log, mark status and skip SMS sending
+        if (log.sendSmsFallback === false) {
+            log.status = 'failed_no_fallback';
+            await log.save();
+            console.log(`WhatsApp message failed for ${log.recipientPhone} (Template: ${log.templateName || 'N/A'}). SMS fallback disabled for this notification.`);
+            return;
+        }
+
         const accountSid = config.TWILIO_ACCOUNT_SID;
         const authToken = config.TWILIO_AUTH_TOKEN;
         const twilioPhoneNumber = config.TWILIO_PHONE_NUMBER;

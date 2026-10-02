@@ -155,6 +155,22 @@ const cartSchema = new mongoose.Schema({
         enum: ['pending', 'partial_paid', 'paid', 'failed', 'refunded'],
         default: 'pending'
     },
+    paymentDropoffNotificationSent: {
+        type: Boolean,
+        default: false
+    },
+    paymentDropoffNotificationSentAt: {
+        type: Date,
+        default: null
+    },
+    abandonedCartNotificationSent: {
+        type: Boolean,
+        default: false
+    },
+    abandonedCartNotificationSentAt: {
+        type: Date,
+        default: null
+    },
     status: {
         type: String,
         enum: ['active', 'pending', 'checkout'],
