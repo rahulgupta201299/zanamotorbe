@@ -577,6 +577,7 @@ exports.handleInteraktWebhook = async (req, res) => {
         // Return 200 OK immediately to satisfy Interakt's 3-second timeout requirement
         res.status(200).json({ success: true });
 
+        console.log('webhook request body: ' + JSON.stringify(req.body))
         const signature = req.headers['interakt-signature'];
         const secret = config.INTERAKT_WEBHOOK_SECRET;
 
