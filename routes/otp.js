@@ -20,4 +20,7 @@ router.post('/generate-admin-email-otp', otpController.generateAdminEmailOTP);
 // Verify OTP (Admin Email)
 router.post('/verify-admin-email-otp', otpController.verifyAdminEmailOTP);
 
+// Interakt Webhook (for WhatsApp failure SMS fallback)
+router.post('/interakt-webhook', otpController.handleInteraktWebhook);
+
 module.exports = router;

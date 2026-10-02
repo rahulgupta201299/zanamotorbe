@@ -17,6 +17,7 @@ module.exports = {
     // Interakt Configuration
     INTERAKT_URL: process.env.INTERAKT_URL,
     INTERAKT_API_KEY: process.env.INTERAKT_API_KEY,
+    INTERAKT_WEBHOOK_SECRET: process.env.INTERAKT_WEBHOOK_SECRET,
     INTERAKT_OTP_TEMPLATE_NAME: process.env.INTERAKT_OTP_TEMPLATE_NAME || 'otp_verification',
     INTERAKT_ORDER_TEMPLATE_NAME: process.env.INTERAKT_ORDER_TEMPLATE_NAME || 'order_confirmation',
 

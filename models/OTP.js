@@ -22,6 +22,19 @@ const otpSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    interaktMessageId: {
+        type: String,
+        default: null
+    },
+    smsFallbackSent: {
+        type: Boolean,
+        default: false
+    },
+    deliveryMethod: {
+        type: String,
+        enum: ['whatsapp', 'sms', 'email'],
+        default: null
+    },
     expiresAt: {
         type: Date,
         required: true,
@@ -35,6 +48,7 @@ const otpSchema = new mongoose.Schema({
 // Create indexes for efficient lookups
 otpSchema.index({ isdCode: 1, phoneNumber: 1 });
 otpSchema.index({ email: 1 });
+otpSchema.index({ interaktMessageId: 1 });
 
 const OTP = mongoose.model('OTP', otpSchema);
 
