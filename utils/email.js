@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 const config = require('../config/config');
 const BikeProduct = require('../models/BikeProduct');
+const NotificationLog = require('../models/NotificationLog');
 
 // Create email transporter
 const transporter = nodemailer.createTransport({
@@ -164,6 +165,19 @@ const sendPaymentConfirmationSMS = async (order, phoneNumber, otpMethod = null) 
 
                 if (response.data && response.data.result !== false) {
                     sentViaWhatsapp = true;
+                    if (response.data.id) {
+                        try {
+                            await NotificationLog.create({
+                                interaktMessageId: response.data.id,
+                                recipientPhone: phoneNumber,
+                                templateName: config.INTERAKT_ORDER_TEMPLATE_NAME,
+                                fallbackText: message,
+                                metadata: { type: 'order_confirmation', orderNumber: order.orderNumber }
+                            });
+                        } catch (logErr) {
+                            console.log('Error saving NotificationLog for order:', logErr.message);
+                        }
+                    }
                     console.log('Payment confirmation WhatsApp sent:', response.data.id || 'success');
                     return { success: true, method: 'whatsapp', id: response.data.id };
                 } else {

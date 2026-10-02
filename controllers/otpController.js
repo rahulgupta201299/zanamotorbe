@@ -3,6 +3,7 @@ const axios = require('axios');
 const config = require('../config/config');
 const OTP = require('../models/OTP');
 const Profile = require('../models/Profile');
+const NotificationLog = require('../models/NotificationLog');
 const emailUtils = require('../utils/email');
 
 // Helper function to generate a 6-digit OTP code
@@ -113,10 +114,21 @@ exports.generateOTP = async (req, res) => {
                     if (response.data && response.data.result !== false) {
                         sentViaWhatsapp = true;
                         otpRecord.deliveryMethod = 'whatsapp';
-                        if (response.data.id) {
-                            otpRecord.interaktMessageId = response.data.id;
-                        }
                         await otpRecord.save();
+
+                        if (response.data.id) {
+                            try {
+                                await NotificationLog.create({
+                                    interaktMessageId: response.data.id,
+                                    recipientPhone: `${isdCode}${phoneNumber}`,
+                                    templateName: config.INTERAKT_OTP_TEMPLATE_NAME,
+                                    fallbackText: `Your OTP is: ${otpCode}`,
+                                    metadata: { type: 'otp', isdCode, phoneNumber }
+                                });
+                            } catch (logErr) {
+                                console.log('Error creating NotificationLog for OTP:', logErr.message);
+                            }
+                        }
                     } else {
                         whatsappFailed = true;
                     }
@@ -575,8 +587,6 @@ exports.verifyAdminEmailOTP = async (req, res) => {
 exports.handleInteraktWebhook = async (req, res) => {
     try {
         // Return 200 OK immediately to satisfy Interakt's 3-second timeout requirement
-        console.log('webhook request body: ' + JSON.stringify(req.body))
-
         res.status(200).json({ success: true });
 
         const signature = req.headers['interakt-signature'];
@@ -609,25 +619,17 @@ exports.handleInteraktWebhook = async (req, res) => {
 
         console.log(`Received message_api_failed webhook from Interakt for message ID: ${messageId}`);
 
-        // Find active, unverified, un-fallback-sent OTP record matching messageId
-        const otpRecord = await OTP.findOne({
+        // Find queued NotificationLog by interaktMessageId
+        const log = await NotificationLog.findOne({
             interaktMessageId: messageId,
-            isVerified: false,
-            smsFallbackSent: false
+            status: 'queued'
         });
 
-        if (!otpRecord) {
-            console.log(`No active unverified OTP record found for Interakt message ID: ${messageId}`);
+        if (!log) {
+            console.log(`No queued NotificationLog found for Interakt message ID: ${messageId}`);
             return;
         }
 
-        // Check if OTP has expired
-        if (new Date() > otpRecord.expiresAt) {
-            console.log(`OTP for Interakt message ID: ${messageId} has expired. Skipping SMS fallback.`);
-            return;
-        }
-
-        // Fall back to Twilio SMS
         const accountSid = config.TWILIO_ACCOUNT_SID;
         const authToken = config.TWILIO_AUTH_TOKEN;
         const twilioPhoneNumber = config.TWILIO_PHONE_NUMBER;
@@ -635,16 +637,29 @@ exports.handleInteraktWebhook = async (req, res) => {
         if (accountSid && authToken && twilioPhoneNumber) {
             const client = twilio(accountSid, authToken);
             await client.messages.create({
-                body: `Your OTP is: ${otpRecord.otp}`,
+                body: log.fallbackText,
                 from: twilioPhoneNumber,
-                to: `${otpRecord.isdCode}${otpRecord.phoneNumber}`,
+                to: log.recipientPhone,
             });
 
-            otpRecord.smsFallbackSent = true;
-            otpRecord.deliveryMethod = 'sms';
-            await otpRecord.save();
+            log.status = 'failed_sms_sent';
+            await log.save();
 
-            console.log(`SMS fallback sent successfully via Twilio for OTP to ${otpRecord.isdCode}-${otpRecord.phoneNumber}`);
+            console.log(`SMS fallback sent via Twilio to ${log.recipientPhone} (Template: ${log.templateName || 'N/A'})`);
+
+            // If metadata indicates an OTP, update the corresponding OTP document's deliveryMethod to 'sms'
+            if (log.metadata && log.metadata.type === 'otp' && log.metadata.isdCode && log.metadata.phoneNumber) {
+                const otpRecord = await OTP.findOne({
+                    isdCode: log.metadata.isdCode,
+                    phoneNumber: log.metadata.phoneNumber,
+                    isVerified: false
+                }).sort({ createdAt: -1 });
+
+                if (otpRecord) {
+                    otpRecord.deliveryMethod = 'sms';
+                    await otpRecord.save();
+                }
+            }
         } else {
             console.log('Twilio configuration missing. Cannot send SMS fallback.');
         }
