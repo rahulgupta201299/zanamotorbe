@@ -1,4 +1,5 @@
 const twilio = require('twilio');
+const axios = require('axios');
 const config = require('../config/config');
 const OTP = require('../models/OTP');
 const Profile = require('../models/Profile');
@@ -38,59 +39,82 @@ exports.generateOTP = async (req, res) => {
         });
 
         try {
-            if (isBypassMode) {
-                return res.status(200).json({
-                    success: true,
-                    data: {
-                        message: `OTP sent successfully to ${isdCode}-${phoneNumber} (Bypassed)`,
-                        phoneNumber: `${isdCode}-${phoneNumber}`,
-                        expiresIn: '5 minutes'
-                    }
-                });
+          if (isBypassMode) {
+            return res.status(200).json({
+              success: true,
+              data: {
+                message: `OTP sent successfully to ${isdCode}-${phoneNumber} (Bypassed)`,
+                phoneNumber: `${isdCode}-${phoneNumber}`,
+                expiresIn: "5 minutes",
+              },
+            });
+          }
+
+          const accountSid = config.TWILIO_ACCOUNT_SID;
+          const authToken = config.TWILIO_AUTH_TOKEN;
+          const twilioPhoneNumber = config.TWILIO_PHONE_NUMBER;
+          const interaktAPIUrl = config.INTERAKT_URL;
+          const interaktApiKey = config.INTERAKT_API_KEY;
+
+          let sentViaWhatsapp = false;
+          let whatsappFailed = false;
+
+          try {
+            const countryCode = isdCode.replace("+", "");
+            const interaktPayload = {
+              countryCode: countryCode,
+              phoneNumber: phoneNumber,
+              type: "Template",
+              template: {
+                name: config.INTERAKT_OTP_TEMPLATE_NAME,
+                languageCode: "en",
+                bodyValues: [otpCode],
+                buttonValues: {
+                  0: [otpCode],
+                },
+              },
+            };
+
+            const response = await axios.post(interaktAPIUrl, interaktPayload, { headers: { Authorization: `Basic ${interaktApiKey}`, "Content-Type": "application/json" } });
+
+            if (response.data && response.data.result !== false) {
+              sentViaWhatsapp = true;
+            } else {
+              whatsappFailed = true;
             }
+          } catch (waError) {
+            console.log("Error sending WhatsApp OTP via Interakt:", waError.response ? waError.response.data : waError.message);
+            whatsappFailed = true;
+          }
 
-            const accountSid = config.TWILIO_ACCOUNT_SID;
-            const authToken = config.TWILIO_AUTH_TOKEN;
-            const twilioPhoneNumber = config.TWILIO_PHONE_NUMBER;
-
-            // Check if Twilio credentials are properly configured
-            if (!accountSid || !authToken || !twilioPhoneNumber) {
-                console.log('Twilio credentials not configured in environment variables');
-                return res.status(500).json({
-                    success: false,
-                    message: 'SMS service is not configured. Please contact administrator.'
-                });
-            }
-
-            // Initialize Twilio client
+          if (!sentViaWhatsapp && whatsappFailed) {
             const client = twilio(accountSid, authToken);
-            // Send SMS with the OTP code
-            const message = await client.messages.create({
-                body: `Your OTP is: ${otpCode}`,
-                from: twilioPhoneNumber,
-                to: `${isdCode}${phoneNumber}`
+            await client.messages.create({
+              body: `Your OTP is: ${otpCode}`,
+              from: twilioPhoneNumber,
+              to: `${isdCode}${phoneNumber}`,
             });
+          }
 
-            // Return success response
-            res.status(200).json({
-                success: true,
-                data: {
-                    message: `OTP sent successfully to ${isdCode}-${phoneNumber}`,
-                    phoneNumber: `${isdCode}-${phoneNumber}`,
-                    expiresIn: '5 minutes'
-                }
-            });
-
+          // Return success response
+          res.status(200).json({
+            success: true,
+            data: {
+              message: `OTP sent successfully to ${isdCode}-${phoneNumber}`,
+              phoneNumber: `${isdCode}-${phoneNumber}`,
+              method: sentViaWhatsapp ? "whatsapp" : "sms",
+              expiresIn: "5 minutes",
+            },
+          });
         } catch (smsError) {
-            console.log(smsError)
-            console.log('Error sending SMS:', smsError.message);
+            console.log('Error sending OTP:', smsError.message);
 
-            // Clean up the OTP record if SMS sending failed
+            // Clean up the OTP record if sending failed
             await OTP.deleteOne({ _id: otpRecord._id });
 
             return res.status(500).json({
                 success: false,
-                message: 'Failed to send OTP via SMS. Please check your API configuration.'
+                message: 'Failed to send OTP via SMS or WhatsApp. Please check your API configuration.'
             });
         }
 

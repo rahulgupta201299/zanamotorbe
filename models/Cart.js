@@ -145,6 +145,11 @@ const cartSchema = new mongoose.Schema({
         type: String,
         enum: ['card', 'upi', 'netbanking', 'cod', 'wallet', 'online']
     },
+    otpMethod: {
+        type: String,
+        enum: ['whatsapp', 'sms'],
+        default: null
+    },
     paymentStatus: {
         type: String,
         enum: ['pending', 'partial_paid', 'paid', 'failed', 'refunded'],

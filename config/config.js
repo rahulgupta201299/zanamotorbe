@@ -14,6 +14,12 @@ module.exports = {
     TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN,
     TWILIO_PHONE_NUMBER: process.env.TWILIO_PHONE_NUMBER,
 
+    // Interakt Configuration
+    INTERAKT_URL: process.env.INTERAKT_URL,
+    INTERAKT_API_KEY: process.env.INTERAKT_API_KEY,
+    INTERAKT_OTP_TEMPLATE_NAME: process.env.INTERAKT_OTP_TEMPLATE_NAME || 'otp_verification',
+    INTERAKT_ORDER_TEMPLATE_NAME: process.env.INTERAKT_ORDER_TEMPLATE_NAME || 'order_confirmation',
+
     // Razorpay Configuration
     RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
     RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,

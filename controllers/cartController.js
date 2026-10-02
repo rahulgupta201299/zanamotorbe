@@ -377,7 +377,7 @@ exports.getActiveCart = async (req, res) => {
 // Manage cart item (add/update/remove multiple items)
 exports.manageCartItem = async (req, res) => {
     try {
-        const { phoneNumber, items, currency } = req.body;
+        const { phoneNumber, items, currency, otpMethod } = req.body;
 
         if (!phoneNumber) {
             return res.status(400).json({
@@ -568,6 +568,7 @@ exports.manageCartItem = async (req, res) => {
                 updatedAt: new Date()
             };
         } else {
+            if (otpMethod !== undefined) cart.otpMethod = otpMethod;
             await cart.save();
             await cart.populate('items.product');
         }
@@ -594,7 +595,8 @@ exports.manageCartItem = async (req, res) => {
             couponRemoved: couponRemoved,
             couponRemovedMessage: couponRemoved ? couponRemovedMessage : undefined,
             currency: convertedCart.currency || currency || 'INR',
-            currencySymbol: convertedCart.currencySymbol || '₹'
+            currencySymbol: convertedCart.currencySymbol || '₹',
+            otpMethod: convertedCart.otpMethod || null
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

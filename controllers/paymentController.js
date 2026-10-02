@@ -158,7 +158,8 @@ exports.createCODOrder = async (req, res) => {
                 }],
                 orderDate: new Date(),
                 originalCartId: cart._id,
-                utmParams: cart.utmParams || null
+                utmParams: cart.utmParams || null,
+                otpMethod: cart.otpMethod || null
             });
         }
 
@@ -248,9 +249,9 @@ const sendOrderNotifications = (order) => {
             .catch(err => console.log('Email sending error:', err));
     }
 
-    // Send SMS notification
+    // Send SMS/WhatsApp notification based on customer's otpMethod preference
     if (customerPhone) {
-        sendPaymentConfirmationSMS(order, customerPhone)
+        sendPaymentConfirmationSMS(order, customerPhone, order.otpMethod || null)
             .then(result => {
                 if (result.success) {
                     console.log('Order confirmation SMS sent to:', customerPhone);
@@ -545,7 +546,8 @@ exports.createOrder = async (req, res) => {
                 }],
                 orderDate: new Date(),
                 originalCartId: cart._id,
-                utmParams: cart.utmParams || null
+                utmParams: cart.utmParams || null,
+                otpMethod: cart.otpMethod || null
             });
         }
 
@@ -1225,7 +1227,8 @@ exports.createPaymentLink = async (req, res) => {
                 }],
                 orderDate: new Date(),
                 originalCartId: cart._id,
-                utmParams: cart.utmParams || null
+                utmParams: cart.utmParams || null,
+                otpMethod: cart.otpMethod || null
             });
         }
 

@@ -135,6 +135,11 @@ const orderSchema = new mongoose.Schema({
         enum: ['cod', 'online'],
         required: true
     },
+    otpMethod: {
+        type: String,
+        enum: ['whatsapp', 'sms'],
+        default: null
+    },
     paymentType: {
         type: String,
         enum: ['razorpay', 'upi'],

@@ -88,13 +88,17 @@ const sendOrderConfirmationEmail = async (order, customerEmail, customerName) =>
 };
 
 /**
- * Send payment confirmation SMS
+ * Send payment confirmation SMS/WhatsApp
  * @param {Object} order - Order details
  * @param {string} phoneNumber - Customer phone number
+ * @param {string} [otpMethod] - Preferred notification channel: 'whatsapp' | 'sms' | null
+ *   - 'sms'       → send via Twilio SMS directly (skip WhatsApp)
+ *   - 'whatsapp'  → try WhatsApp first, fall back to SMS on failure
+ *   - null/absent → try WhatsApp first, fall back to SMS on failure (default behaviour)
  */
-const sendPaymentConfirmationSMS = async (order, phoneNumber) => {
+const sendPaymentConfirmationSMS = async (order, phoneNumber, otpMethod = null) => {
     try {
-        console.log('sendPaymentConfirmationSMS')
+        console.log('sendPaymentConfirmationSMS, otpMethod:', otpMethod);
 
         const isBypassMode = config.BYPASS_OTP;
         if (isBypassMode) {
@@ -102,23 +106,95 @@ const sendPaymentConfirmationSMS = async (order, phoneNumber) => {
             return { success: true, bypassed: true };
         }
 
-        const client = require('twilio')(
-            config.TWILIO_ACCOUNT_SID,
-            config.TWILIO_AUTH_TOKEN
-        );
-
         const message = `Thank you for your recent order ${order.orderNumber} on Zana Motorcycles of Amount ${Math.round(order.totalAmount)}. We will notify once the order is shipped.`;
 
-        const twilioResponse = await client.messages.create({
-            body: message,
-            from: config.TWILIO_PHONE_NUMBER,
-            to: phoneNumber
-        });
+        // If customer explicitly chose SMS, go straight to Twilio — no WhatsApp attempt
+        if (otpMethod === 'sms') {
+            const client = require('twilio')(
+                config.TWILIO_ACCOUNT_SID,
+                config.TWILIO_AUTH_TOKEN
+            );
 
-        console.log('Payment confirmation SMS sent:', twilioResponse.sid);
-        return { success: true, sid: twilioResponse.sid };
+            const twilioResponse = await client.messages.create({
+                body: message,
+                from: config.TWILIO_PHONE_NUMBER,
+                to: phoneNumber
+            });
+
+            console.log('Payment confirmation SMS sent (customer preference):', twilioResponse.sid);
+            return { success: true, method: 'sms', sid: twilioResponse.sid };
+        }
+
+        // For 'whatsapp' preference or no preference: try WhatsApp first, fall back to SMS
+        let sentViaWhatsapp = false;
+        let whatsappFailed = false;
+
+        const interaktApiKey = config.INTERAKT_API_KEY;
+        const interaktAPIUrl = config.INTERAKT_URL;
+
+        if (interaktApiKey) {
+            try {
+                const axios = require('axios');
+
+                // Parse phone number to extract country code and actual number
+                let countryCode = '91';
+                let phoneStr = phoneNumber.toString().replace(/[^0-9]/g, '');
+                if (phoneStr.length > 10) {
+                    countryCode = phoneStr.substring(0, phoneStr.length - 10);
+                    phoneStr = phoneStr.substring(phoneStr.length - 10);
+                }
+
+                const interaktPayload = {
+                    countryCode: countryCode,
+                    phoneNumber: phoneStr,
+                    type: 'Template',
+                    template: {
+                        name: config.INTERAKT_ORDER_TEMPLATE_NAME,
+                        languageCode: 'en',
+                        bodyValues: [order.orderNumber, Math.round(order.totalAmount).toString()]
+                    }
+                };
+
+                const response = await axios.post(interaktAPIUrl, interaktPayload, {
+                    headers: {
+                        'Authorization': `Basic ${interaktApiKey}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.data && response.data.result !== false) {
+                    sentViaWhatsapp = true;
+                    console.log('Payment confirmation WhatsApp sent:', response.data.id || 'success');
+                    return { success: true, method: 'whatsapp', id: response.data.id };
+                } else {
+                    whatsappFailed = true;
+                }
+            } catch (waError) {
+                console.log('Error sending payment confirmation WhatsApp via Interakt:', waError.response ? waError.response.data : waError.message);
+                whatsappFailed = true;
+            }
+        } else {
+            whatsappFailed = true;
+        }
+
+        // Fallback to Twilio SMS if WhatsApp failed
+        if (!sentViaWhatsapp && whatsappFailed) {
+            const client = require('twilio')(
+                config.TWILIO_ACCOUNT_SID,
+                config.TWILIO_AUTH_TOKEN
+            );
+
+            const twilioResponse = await client.messages.create({
+                body: message,
+                from: config.TWILIO_PHONE_NUMBER,
+                to: phoneNumber
+            });
+
+            console.log('Payment confirmation SMS sent (WhatsApp fallback):', twilioResponse.sid);
+            return { success: true, method: 'sms', sid: twilioResponse.sid };
+        }
     } catch (error) {
-        console.log('Error sending payment confirmation SMS:', error);
+        console.log('Error sending payment confirmation SMS/WhatsApp:', error);
         return { success: false, error: error.message };
     }
 };
