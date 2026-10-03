@@ -815,6 +815,27 @@ async function handlePaymentCaptured(paymentEntity) {
         }
 
         if (order) {
+            // Extract offer details and calculate expected amount
+            const paidAmountPaisa = paymentEntity.amount;
+            let expectedAmountPaisa = 0;
+
+            if (order.paymentMethod === 'cod') {
+                expectedAmountPaisa = Math.round((order.advancePaid || 0) * 100);
+            } else {
+                expectedAmountPaisa = Math.round(order.totalAmount * 100);
+            }
+
+            const razorpayOfferId = paymentEntity.offer_id || (livePayment && livePayment.offer_id) || null;
+            let razorpayOfferAmount = 0;
+            if (razorpayOfferId) {
+                if (paidAmountPaisa < expectedAmountPaisa) {
+                    razorpayOfferAmount = (expectedAmountPaisa - paidAmountPaisa) / 100;
+                }
+                order.razorpayOfferId = razorpayOfferId;
+                order.razorpayOfferAmount = razorpayOfferAmount;
+                console.log(`Razorpay offer detected: ${razorpayOfferId}, discount: ₹${razorpayOfferAmount}, paid: ₹${paidAmountPaisa / 100}, expected: ₹${expectedAmountPaisa / 100}`);
+            }
+
             // 🛡️ Check if the order already has a confirmed status (paid, partial_paid)
             // Don't overwrite already confirmed statuses - this prevents a stale 'failed' from overriding
             // HOWEVER: if orderStatus is still 'processing' (set by verifyPayment before the webhook arrived),
@@ -828,24 +849,20 @@ async function handlePaymentCaptured(paymentEntity) {
                         timestamp: new Date(),
                         notes: 'Payment confirmed via webhook (orderStatus promoted from processing)'
                     });
-                    await order.save();
                 } else {
                     console.log(`Order ${order.orderNumber} already has paymentStatus "${order.paymentStatus}" and orderStatus "${order.orderStatus}". Skipping update from potentially stale webhook.`);
                 }
+                await order.save();
                 return;
             }
 
             // Validate payment amount (in paise) against expected order amount
-            const paidAmountPaisa = paymentEntity.amount;
-            let expectedAmountPaisa = 0;
-
-            if (order.paymentMethod === 'cod') {
-                expectedAmountPaisa = Math.round(order.advancePaid * 100);
-            } else {
-                expectedAmountPaisa = Math.round(order.totalAmount * 100);
+            let isValidAmount = (paidAmountPaisa === expectedAmountPaisa);
+            if (!isValidAmount && razorpayOfferId && paidAmountPaisa < expectedAmountPaisa) {
+                isValidAmount = true; // Valid discount via Razorpay offer
             }
 
-            if (paidAmountPaisa !== expectedAmountPaisa) {
+            if (!isValidAmount) {
                 console.log(`CRITICAL: Payment amount mismatch for order ${order.orderNumber}. Expected: ${expectedAmountPaisa} paise, Paid: ${paidAmountPaisa} paise. Aborting webhook processing.`);
 
                 order.paymentStatus = 'amount_mismatch';
@@ -1021,6 +1038,8 @@ exports.getPaymentStatus = async (req, res) => {
                     orderStatus: order.orderStatus,
                     razorpayOrderId: order.razorpayOrderId,
                     paymentId: order.razorpayPaymentId,
+                    razorpayOfferId: order.razorpayOfferId || null,
+                    razorpayOfferAmount: order.razorpayOfferAmount || 0,
                     totalAmount: displayAmount,
                     displayCurrency: validCurrency ? currency : 'INR',
                     currencySymbol: currencySymbol

@@ -166,6 +166,14 @@ const orderSchema = new mongoose.Schema({
     razorpaySignature: {
         type: String
     },
+    razorpayOfferId: {
+        type: String,
+        default: null
+    },
+    razorpayOfferAmount: {
+        type: Number,
+        default: 0
+    },
     adminCapturedPaymentId: {
         type: String
     },
