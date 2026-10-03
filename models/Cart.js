@@ -171,6 +171,14 @@ const cartSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
+    abandonedCartYesterdayNotificationSent: {
+        type: Boolean,
+        default: false
+    },
+    abandonedCartYesterdayNotificationSentAt: {
+        type: Date,
+        default: null
+    },
     status: {
         type: String,
         enum: ['active', 'pending', 'checkout'],
