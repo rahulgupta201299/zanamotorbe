@@ -167,9 +167,13 @@ const sendPaymentConfirmationSMS = async (order, phoneNumber, otpMethod = null) 
                     sentViaWhatsapp = true;
                     if (response.data.id) {
                         try {
+                            const formattedRecipientPhone = (phoneNumber && phoneNumber.includes('-'))
+                                ? phoneNumber
+                                : `+${countryCode}-${phoneStr}`;
+
                             await NotificationLog.create({
                                 interaktMessageId: response.data.id,
-                                recipientPhone: phoneNumber,
+                                recipientPhone: formattedRecipientPhone,
                                 templateName: config.INTERAKT_ORDER_TEMPLATE_NAME,
                                 fallbackText: message,
                                 metadata: { type: 'order_confirmation', orderNumber: order.orderNumber }

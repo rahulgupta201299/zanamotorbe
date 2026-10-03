@@ -120,7 +120,7 @@ exports.generateOTP = async (req, res) => {
                             try {
                                 await NotificationLog.create({
                                     interaktMessageId: response.data.id,
-                                    recipientPhone: `${isdCode}${phoneNumber}`,
+                                    recipientPhone: `${isdCode}-${phoneNumber}`,
                                     templateName: config.INTERAKT_OTP_TEMPLATE_NAME,
                                     fallbackText: `Your OTP is: ${otpCode}`,
                                     metadata: { type: 'otp', isdCode, phoneNumber }
@@ -647,7 +647,7 @@ exports.handleInteraktWebhook = async (req, res) => {
             await client.messages.create({
                 body: log.fallbackText,
                 from: twilioPhoneNumber,
-                to: log.recipientPhone,
+                to: log.recipientPhone ? log.recipientPhone.replace(/-/g, '') : log.recipientPhone,
             });
 
             log.status = 'failed_sms_sent';
